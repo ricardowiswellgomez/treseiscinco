@@ -18,6 +18,41 @@ CREATE INDEX IF NOT EXISTS expenses_cash_session_idx
   ON public.expenses (business_id, created_by, created_at)
   WHERE payment_method = 'Efectivo';
 
+-- Attribute each authenticated expense to the user who actually records it.
+-- The browser must not be able to spoof another user's cash drawer.
+ALTER TABLE public.expenses
+  ALTER COLUMN created_by SET DEFAULT auth.uid();
+
+CREATE OR REPLACE FUNCTION private.set_expense_created_by()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO ''
+AS $function$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF auth.uid() IS NOT NULL THEN
+      NEW.created_by := auth.uid();
+    END IF;
+  ELSE
+    NEW.created_by := OLD.created_by;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS set_expense_created_by ON public.expenses;
+CREATE TRIGGER set_expense_created_by
+BEFORE INSERT OR UPDATE OF created_by ON public.expenses
+FOR EACH ROW EXECUTE FUNCTION private.set_expense_created_by();
+
+DROP POLICY IF EXISTS expenses_insert_by_permission ON public.expenses;
+CREATE POLICY expenses_insert_by_permission
+ON public.expenses FOR INSERT TO authenticated
+WITH CHECK (
+  created_by = auth.uid()
+  AND private.can_access_business(business_id, 'expenses_manage')
+);
+
 -- Direct INSERT/UPDATE grants are revoked in a follow-up migration after the
 -- application has moved to these RPCs.
 
