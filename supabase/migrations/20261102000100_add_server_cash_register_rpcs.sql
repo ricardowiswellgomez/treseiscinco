@@ -65,19 +65,24 @@ LANGUAGE plpgsql
 SET search_path TO ''
 AS $function$
 DECLARE
-  v_actor uuid := coalesce(NEW.created_by, auth.uid());
+  v_actor uuid;
 BEGIN
-  IF NEW.payment_method = 'Efectivo'
-     AND NEW.business_id IS NOT NULL
-     AND v_actor IS NOT NULL THEN
+  IF NEW.payment_method = 'Efectivo' AND NEW.business_id IS NOT NULL THEN
+    -- Bind identity before deriving the lock key; client-supplied created_by
+    -- must never choose another cashier's lock or drawer.
+    IF auth.uid() IS NOT NULL THEN
+      NEW.created_by := auth.uid();
+    END IF;
+    v_actor := coalesce(auth.uid(), NEW.created_by);
+    IF v_actor IS NULL THEN
+      RAISE EXCEPTION 'No se pudo identificar al responsable del movimiento en efectivo.'
+        USING ERRCODE = 'check_violation';
+    END IF;
+
     PERFORM pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtextextended(NEW.business_id::text || ':' || v_actor::text, 0)
     );
-    -- The authenticated actor owns the drawer; never trust a client-supplied created_by.
-    IF auth.uid() IS NOT NULL THEN
-      NEW.created_by := auth.uid();
-      v_actor := auth.uid();
-    END IF;
+
     -- Recheck after acquiring the same lock used by close_cash_register_session.
     -- A payment waiting behind a close must fail rather than land outside the session.
     IF NOT EXISTS (
