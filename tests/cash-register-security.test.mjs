@@ -52,6 +52,8 @@ test("server close calculation includes cash sales, supplier payments and expens
   assert.match(serverMigration, /hashtextextended\(p_business_id::text \|\| ':' \|\| v_actor::text, 0\)/);
   assert.match(serverMigration, /hashtextextended\(p_business_id::text \|\| ':' \|\| v_session_owner::text, 0\)/);
   assert.match(serverMigration, /created_by = \(select auth\.uid\(\)\)[\s\S]*private\.can_access_business\(business_id, 'expenses_manage'\)/);
+  assert.match(serverMigration, /GRANT INSERT \(bank_account_id\) ON TABLE public\.expenses TO authenticated/);
+  assert.match(serverMigration, /bank_account_id IS NULL[\s\S]*payment_method <> 'Efectivo'[\s\S]*private\.can_manage_members\(business_id\)/);
   assert.equal((serverMigration.match(/SET search_path TO ''/g) || []).length, 4);
 });
 
