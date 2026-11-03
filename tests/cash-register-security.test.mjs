@@ -57,7 +57,9 @@ test("server close calculation includes cash sales, supplier payments and expens
 
 test("cash sessions are audited and direct API writes are removed after rollout", () => {
   assert.match(serverMigration, /CREATE TRIGGER audit_business_changes/);
-  assert.match(lockdownMigration, /REVOKE INSERT, UPDATE, DELETE ON public\.cash_register_sessions FROM authenticated/);
+  assert.match(lockdownMigration, /REVOKE INSERT, UPDATE, DELETE ON TABLE public\.cash_register_sessions FROM authenticated/);
+  assert.match(lockdownMigration, /REVOKE INSERT \([\s\S]*?\),\s*UPDATE \([\s\S]*?\) ON TABLE public\.cash_register_sessions FROM authenticated/);
+  assert.match(lockdownMigration, /DROP POLICY IF EXISTS cash_register_sessions_insert_by_permission/);
   assert.match(lockdownMigration, /DROP POLICY IF EXISTS cash_register_sessions_update_by_permission/);
 });
 
