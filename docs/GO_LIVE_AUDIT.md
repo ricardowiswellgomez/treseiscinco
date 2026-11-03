@@ -6,9 +6,9 @@
 
 ## Decisión ejecutiva
 
-**Mantener el PR #80 abierto y en borrador; no fusionar ni desplegar todavía.** La exposición de datos del catálogo ya fue corregida en producción; también se aplicaron el endurecimiento de `search_path`, los índices faltantes y las reglas de caja. Sin embargo, el historial remoto/local de migraciones sigue sin ser reconstruible de forma completa; no hay una rama aislada de ensayo; falta completar Auth/MFA, proteger `main` y probar la integración final con la interfaz nueva.
+**Mantener el PR #80 abierto y en borrador; no fusionar ni desplegar todavía.** El endurecimiento de catálogo, caja, dependencias y CSP está implementado en la rama y validado por CI, pero la nueva interfaz no está publicada. Siguen pendientes controles de cuenta (CAPTCHA, MFA, protección de `main` y secreto de despliegue), reconciliación del historial de migraciones y conciliación del pago histórico. La organización Supabase está en plan Free: las ramas de ensayo y la protección nativa de contraseñas filtradas requieren Pro.
 
-Se aplicaron cinco migraciones de endurecimiento en producción (privacidad del catálogo, `search_path`, índices FK, caja y limpieza de índice duplicado). **No se aplicó** el SQL posdespliegue que revoca escrituras directas de caja; debe esperar al despliegue de la interfaz nueva. `main` sigue intacta y el Worker no se desplegó desde el PR.
+Se aplicaron seis migraciones de endurecimiento en producción (privacidad del catálogo, `search_path`, índices FK, caja y limpieza de índice duplicado). **No se aplicó** el SQL posdespliegue que revoca escrituras directas de caja; debe esperar al despliegue de la interfaz nueva. `main` sigue intacta y el Worker no se desplegó desde el PR.
 
 ## Estado confirmado
 
@@ -25,7 +25,7 @@ Se aplicaron cinco migraciones de endurecimiento en producción (privacidad del 
 
 ### Supabase — base de datos
 
-- El proyecto está en estado `ACTIVE_HEALTHY`, PostgreSQL 17.
+- El proyecto está en estado `ACTIVE_HEALTHY`, PostgreSQL 17. La organización `Ricardo Wiswell Gomez` está en plan `Free`.
 - Historial remoto: **100 migraciones**; el repositorio contiene **54 archivos SQL** en `supabase/migrations`. Las seis últimas versiones remotas son las correcciones de privacidad, `search_path`, índices, caja, limpieza del índice duplicado y compatibilidad de la interfaz antigua; la última es `20261103175507 guard_cash_register_session_direct_writes`.
 - El repositorio no contiene una copia íntegra y ordenada de todo el historial remoto. Se alinearon los cinco archivos de endurecimiento con las versiones reales que Supabase registró, pero todavía quedan migraciones históricas ausentes o con nombres/versiones distintos. Esto impide declarar reproducible una reconstrucción completa desde cero.
 - **No ejecutar `supabase db push`, ni insertar/eliminar filas de `supabase_migrations.schema_migrations` manualmente.** No se debe marcar como aplicada una migración sin demostrar que su contenido ya está reflejado en el esquema.
@@ -41,8 +41,8 @@ Se aplicaron cinco migraciones de endurecimiento en producción (privacidad del 
 - Cuatro tablas de métricas de plataforma tienen RLS habilitado sin políticas. La consulta de privilegios confirmó que `anon` y `authenticated` no tienen permisos directos sobre ellas. El aviso es informativo y no se deben crear políticas de lectura abiertas para silenciarlo.
 - Se comprobó que `anon` y `authenticated` no tienen permiso `CREATE` sobre los esquemas `public`, `private` ni `auth`; esto reduce el riesgo de sustitución de objetos en los `search_path` existentes. `anon` tampoco tiene `USAGE` sobre `private`.
 - El asesor reporta 6 RPC `SECURITY DEFINER` ejecutables por `anon` y 43 por `authenticated`. No revocar en bloque: incluye catálogo público, imágenes, cupones, estado de pedidos, apertura/cierre de caja y operaciones autenticadas del negocio. Cada RPC debe seguir revisándose individualmente por control de negocio, pertenencia, propiedad y alcance de datos.
-- La protección de contraseñas filtradas de Supabase Auth está **desactivada** (aviso WARN confirmado).
-- La protección CAPTCHA de Auth todavía no está habilitada en la configuración del proyecto. El Worker ya contiene el widget Turnstile y la ruta de registro protegida, pero el token no sustituye la verificación nativa de Supabase mientras el proveedor y su secreto no estén configurados.
+- La protección de contraseñas filtradas de Supabase Auth está **desactivada**. Supabase la ofrece solo en Pro o superior; la organización actual es Free. Activarla requiere aprobar una actualización de plan. [Documentación oficial](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+- La protección CAPTCHA nativa de Auth todavía no está habilitada. La rama incluye el widget Turnstile y el Worker reenvía el token; falta que el propietario active CAPTCHA en Authentication > Bot and Abuse Protection, seleccione Cloudflare Turnstile y pegue allí el Secret Key privado. El Site Key ya está en el Worker. [Documentación oficial](https://supabase.com/docs/guides/auth/auth-captcha).
 
 ### Cloudflare — zona y Worker
 
@@ -56,7 +56,7 @@ Se aplicaron cinco migraciones de endurecimiento en producción (privacidad del 
 
 ### GitHub — controles de repositorio
 
-- La rama `main` aparece como `protected: false`; la API también devuelve que no hay reglasets de repositorio. El workflow se endureció: builds de PR con `contents: read`; despliegue en un job separado, también de solo lectura, que recibe el secreto de Cloudflare solo en ese job.
+- La rama `main` aparece como `protected: false`; no hay reglasets de repositorio. La conexión GitHub instalada no tiene permiso de administración de ramas (403), así que una persona administradora debe activar las reglas desde GitHub. El workflow conserva permisos de solo lectura para builds de PR y separa el despliegue.
 - La conexión de GitHub disponible permite leer y modificar contenido/PR, pero no tiene capacidad administrativa para activar protección de rama. Por tanto, esta medida requiere una persona con rol administrador del repositorio.
 - MFA de GitHub no pudo verificarse con la conexión disponible.
 
@@ -97,8 +97,8 @@ Documentación:
 
 ### P1 — Cadena de suministro y CSP
 
-- **Lockfile y CI:** `package-lock.json` (lockfile v3) está versionado y el workflow usa `npm ci --no-audit --no-fund`. Las ejecuciones #535 y #536 pasaron 97/97 pruebas y los builds web/Android. El paso `npm audit --audit-level=high` termina con éxito porque no encontró vulnerabilidades de severidad alta o crítica, pero muestra **6 vulnerabilidades moderadas**: avisos de `glob` (bypass de cancelación), `minimatch` (posible denegación de servicio) y `uuid` (comprobación de límites de buffer), propagados por dependencias como `rimraf`/`xcode`/`@capacitor/cli`. El log indica que corregir `uuid` con `--force` llevaría `@capacitor/cli` a 8.6.0 fuera del rango declarado; no se forzó esa actualización. Pendiente: revisar el árbol de dependencias y actualizar versiones compatibles, con CI completo después del cambio.
-- CSP todavía no está aplicada. El Worker inyecta scripts/estilos inline y la app genera documentos de impresión con scripts inline; activar CSP sin migrar esos comportamientos puede romper registro, recuperación, tarjetas, cotizaciones o impresión. Primero moverlos/protegerlos con nonces y probar cada flujo, luego aplicar una política CSP restrictiva.
+- **Dependencias:** Capacitor actualizado a 8.6.0; overrides fijados en `glob@14.0.3` y `minimatch@11.0.4`; `xcode` resuelto a 4.0.0. CI #544 ejecutó `npm audit --audit-level=low` y encontró **0 vulnerabilidades**. El workflow regenera el lockfile antes de `npm ci` y publica `npm-lockfile-recovery`; el `package-lock.json` actualizado aún debe incorporarse al repositorio.
+- CSP aplicada en el código del PR: se externalizaron los scripts de arranque/Turnstile, se retiraron los scripts inline de impresión y se añadió `media-src 'self' blob: data:` para el audio de Celeste. `script-src` bloquea scripts inline; se conserva `style-src 'unsafe-inline'` para estilos dinámicos React. CI #543 validó el cambio; aún no está desplegado en producción.
 
 ### P2 — Alcance funcional posterior
 
@@ -143,8 +143,8 @@ Los movimientos históricos en efectivo que se registraron sin sesión no se asi
 
 ## Estado de salida
 
-- [x] CI #535 aprobó el HEAD de código sincronizado (`fd9f3ed`) con 97/97 pruebas, build web y APK.
-- [x] CI #536 aprobó el HEAD documental actual (`89d2153`), con 97/97 pruebas; despliegue omitido por tratarse de un PR.
+- [x] CI #543 aprobó CSP/scripts externos/impresión/audio y build web/Android.
+- [x] CI #544 aprobó `npm audit --audit-level=low` (0 vulnerabilidades), 99/99 pruebas, build web, APK, icono y activos; despliegue omitido por ser un PR.
 - [x] APK de prueba generada y validada.
 - [x] Reglas administradas gratuitas de Cloudflare desplegadas y verificadas por API.
 - [x] TLS/HTTPS/HSTS comprobados.
@@ -154,7 +154,7 @@ Los movimientos históricos en efectivo que se registraron sin sesión no se asi
 - [x] `search_path` de funciones expuestas endurecido y verificado.
 - [x] 17 índices de claves foráneas creados y verificados; avisos de FK/RLS initplan eliminados.
 - [x] Caja segura y compatible con ambas interfaces: RPC nueva y escrituras directas antiguas protegidas por trigger; ensayo reversible posterior a la aplicación aprobado.
-- [ ] Rama de ensayo aislada y pruebas integrales multiempresa; no creada por falta de medio de pago/costo confirmado.
+- [ ] Rama de ensayo y pruebas multiempresa; requieren actualizar la organización a Supabase Pro y aceptar el consumo facturable de branching.
 - [ ] Conciliar manualmente el pago histórico de $44.000 sin sesión.
 - [ ] Publicar la nueva interfaz/Worker; después ejecutar el SQL posdespliegue que revoca escrituras directas de caja.
 - [ ] Pruebas transaccionales y de aislamiento multiempresa aprobadas.
@@ -164,8 +164,9 @@ Los movimientos históricos en efectivo que se registraron sin sesión no se asi
 - [ ] Secreto `CLOUDFLARE_API_TOKEN` creado en GitHub Actions para publicar el Worker al fusionar.
 - [ ] SQL posdespliegue de caja ejecutado tras pruebas.
 - [x] `package-lock.json` comprometido y CI usa `npm ci`; #535 y #536 pasaron las 97 pruebas. La auditoría todavía reporta 6 vulnerabilidades moderadas, pendientes de remediación.
-- [ ] Resolver las 6 vulnerabilidades moderadas de dependencias con actualizaciones compatibles y pruebas completas.
-- [ ] CSP aplicada tras proteger los scripts de la app y de impresión.
+- [x] Dependencias actualizadas; CI #544 encontró 0 vulnerabilidades con umbral `low`.
+- [x] CSP aplicada en el código del PR y validada por CI #543; aún no está en producción.
+- [ ] Incorporar el `package-lock.json` generado en CI #544 al repositorio.
 - [ ] Conciliación bancaria, devoluciones y contabilidad formal diseñadas/implementadas.
 
 **No declarar Treseiscinco listo para pagos reales hasta cerrar todos los P0 y probar los flujos financieros en un entorno aislado.**
