@@ -15,10 +15,10 @@ No se aplicaron las migraciones del PR a producción ni se revocaron escrituras 
 ### Código y CI
 
 - PR #80 permanece abierto y en borrador.
-- Último commit documental de esta rama: `8506bd234d9d2bd9a079735d36fb222e810e3dc0`. La última ejecución completa confirmada antes de esta actualización fue #489; la ejecución #493 está en curso.
-- GitHub Actions, ejecución **#489**, terminó en `success`: auditoría de dependencias de alta severidad, sintaxis del Worker, pruebas, build web, verificación de la ruta APK, APK instalable, icono de marca y dry-run de Wrangler.
-- El artefacto `treseiscinco-apk` se generó correctamente (4.281.532 bytes; SHA-256 `48a5d2efd6412fde264565dc31f58532a2f6354b1cdcd4c5f550cf0a90d447af`). Es un artefacto de prueba; no se publicó como APK de producción.
-- El despliegue del Worker y la publicación del APK se omitieron correctamente porque el evento fue un pull request.
+- Las ejecuciones #493 y #494 terminaron en `success`. La siguiente ejecución debe validar el nuevo aislamiento de permisos del workflow y el ajuste del buscador público.
+- GitHub Actions, ejecución **#494**, terminó en `success`: auditoría de dependencias de alta severidad, sintaxis del Worker, pruebas, build web, verificación de la ruta APK, APK instalable, icono de marca y dry-run de Wrangler. El cambio posterior separa el despliegue en otro job y aún debe pasar CI.
+- El artefacto `treseiscinco-apk` se generó correctamente (4.281.532 bytes; SHA-256 `489fd6566d39b7e997943c1ef7c2e74150dfe80e2df88b1c9766abdd2048898d`). Es un artefacto de prueba; no se publicó como APK de producción.
+- El despliegue del Worker se omitió correctamente porque el evento fue un pull request. El APK se incorpora al directorio `dist` del mismo build para publicarlo como activo estático.
 - `main` permanece en `a4c67b1d3f48b1eff59bdea729112f843bc7e459`.
 
 ### Supabase — base de datos
@@ -50,7 +50,7 @@ No se aplicaron las migraciones del PR a producción ni se revocaron escrituras 
 
 ### GitHub — controles de repositorio
 
-- La rama `main` aparece como `protected: false`; la API también devuelve que no hay reglasets de repositorio.
+- La rama `main` aparece como `protected: false`; la API también devuelve que no hay reglasets de repositorio. El workflow se endureció: builds de PR con `contents: read`; despliegue en un job separado, también de solo lectura, que recibe el secreto de Cloudflare solo en ese job.
 - La conexión de GitHub disponible permite leer y modificar contenido/PR, pero no tiene capacidad administrativa para activar protección de rama. Por tanto, esta medida requiere una persona con rol administrador del repositorio.
 - MFA de GitHub no pudo verificarse con la conexión disponible.
 
