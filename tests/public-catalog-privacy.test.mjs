@@ -28,7 +28,7 @@ test("exposed SECURITY DEFINER RPCs preserve trusted paths and put pg_temp last 
   assert.ok(pathMigration.includes("has_function_privilege('authenticated', p.oid, 'EXECUTE')"));
   assert.ok(pathMigration.includes("v_path text"));
   assert.ok(pathMigration.includes("cfg.setting LIKE 'search_path=%'"));
-  assert.ok(pathMigration.includes("!~ '(^|,)\\\\s*pg_temp\\\\s*$'"));
+  assert.ok(pathMigration.includes("!~ '(^|,)[[:space:]]*pg_temp[[:space:]]*$'"));
   assert.ok(pathMigration.includes("ALTER FUNCTION %s SET search_path TO %s, pg_temp"));
   assert.ok(pathMigration.includes("search_path=" + String.fromCharCode(34, 34)));
   for (const signature of [
