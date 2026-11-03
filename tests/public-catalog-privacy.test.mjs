@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 
 const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const migration = await readFile(new URL("../supabase/migrations/20261102000300_redact_public_catalog_internal_fields.sql", import.meta.url), "utf8");
+const pathMigration = await readFile(new URL("../supabase/migrations/20261102000500_harden_public_rpc_search_paths.sql", import.meta.url), "utf8");
 
 test("public catalog JSON does not disclose internal inventory quantities, SKU or tax code", () => {
   for (const field of [
@@ -17,6 +18,16 @@ test("public catalog JSON does not disclose internal inventory quantities, SKU o
   assert.ok(!migration.includes("p.metadata"), "the public catalog must not select private product metadata");
   assert.ok(migration.trimEnd().endsWith("$function$;"), "the SQL function definition must be terminated");
   assert.ok(migration.includes("SET search_path TO ''"), "SECURITY DEFINER catalog function must use an empty search path");
+});
+
+test("all other public SECURITY DEFINER RPCs have an empty search path", () => {
+  for (const signature of [
+    "get_public_catalog_image(uuid, uuid, text)",
+    "get_public_catalog_variant_image(uuid, uuid, uuid, text)",
+    "get_public_coupon_quote(uuid, text, bigint)",
+    "get_public_store_order_status(text, uuid)",
+    "resolve_public_catalog_slug(text)"
+  ]) assert.ok(pathMigration.includes("ALTER FUNCTION public." + signature + " SET search_path = ''"), "missing search_path hardening: " + signature);
 });
 
 test("storefront UI uses availability only as a display boolean and leaves stock validation to checkout", () => {
