@@ -87,7 +87,7 @@ DROP POLICY IF EXISTS expenses_insert_by_permission ON public.expenses;
 CREATE POLICY expenses_insert_by_permission
 ON public.expenses FOR INSERT TO authenticated
 WITH CHECK (
-  created_by = auth.uid()
+  created_by = (select auth.uid())
   AND private.can_access_business(business_id, 'expenses_manage')
 );
 
