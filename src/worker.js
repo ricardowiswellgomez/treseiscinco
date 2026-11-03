@@ -21,6 +21,7 @@ const applySecurityHeaders=headers=>{
   "font-src 'self' data: https://fonts.gstatic.com",
   "connect-src 'self' https://maogebecfottfvlrjbho.supabase.co wss://maogebecfottfvlrjbho.supabase.co https://challenges.cloudflare.com",
   "frame-src https://challenges.cloudflare.com",
+  "media-src 'self' blob: data:",
   "manifest-src 'self'",
   "worker-src 'self' blob:",
   "upgrade-insecure-requests"
