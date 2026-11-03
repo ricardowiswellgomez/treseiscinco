@@ -29,6 +29,13 @@ test("server close calculation includes cash sales, supplier payments and expens
   assert.ok(serverMigration.includes("expenses_cash_session_idx"));
   assert.ok(serverMigration.includes("cash_register_sessions_opened_by_idx"));
   assert.ok(serverMigration.includes("cash_register_sessions_closed_by_idx"));
+  assert.match(serverMigration, /CREATE UNIQUE INDEX IF NOT EXISTS cash_register_sessions_one_open_per_user_idx[\s\S]*?ON public\.cash_register_sessions \(business_id, opened_by\)[\s\S]*?WHERE status = 'open'/);
+  assert.match(serverMigration, /sp\.created_at >= v_session\.opened_at/);
+  assert.match(serverMigration, /pp\.created_at >= v_session\.opened_at/);
+  assert.doesNotMatch(serverMigration, /sp\.paid_at >= v_session\.opened_at/);
+  assert.doesNotMatch(serverMigration, /pp\.paid_at >= v_session\.opened_at/);
+  assert.match(serverMigration, /ON public\.sale_payments \(business_id, created_by, created_at\)/);
+  assert.match(serverMigration, /ON public\.purchase_payments \(business_id, created_by, created_at\)/);
   assert.equal((serverMigration.match(/SET search_path TO ''/g) || []).length, 2);
 });
 
