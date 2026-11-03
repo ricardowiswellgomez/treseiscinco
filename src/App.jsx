@@ -4469,7 +4469,7 @@ function AuthenticatedApp() {
 
   async function submitAuth(event) {
     event.preventDefault();
-    if (mode === "signup" && (password.length < 12 || password.length > 128)) { setBusy(false); setError("La contraseña de una cuenta nueva debe tener entre 12 y 128 caracteres."); setNotice(""); return; }
+    if ((mode === "signup" || mode === "update-password") && (password.length < 12 || password.length > 128)) { setBusy(false); setError("La contraseña nueva debe tener entre 12 y 128 caracteres."); setNotice(""); return; }
     setBusy(true); setError(""); setNotice("");
     try {
       if (mode === "forgot") {
