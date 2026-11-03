@@ -24,6 +24,11 @@ test("server close calculation includes cash sales, supplier payments and expens
   assert.match(serverMigration, /v_session\.opening_cash_minor \+ v_received - v_purchases - v_expenses/);
   assert.match(serverMigration, /FOR UPDATE/);
   assert.match(serverMigration, /private\.can_access_business\(p_business_id, 'sales_manage'\)/);
+  assert.ok(serverMigration.includes("sale_payments_cash_session_idx"));
+  assert.ok(serverMigration.includes("purchase_payments_cash_session_idx"));
+  assert.ok(serverMigration.includes("expenses_cash_session_idx"));
+  assert.ok(serverMigration.includes("cash_register_sessions_opened_by_idx"));
+  assert.ok(serverMigration.includes("cash_register_sessions_closed_by_idx"));
 });
 
 test("cash sessions are audited and direct API writes are removed after rollout", () => {
