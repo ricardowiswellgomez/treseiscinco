@@ -24,7 +24,7 @@ CREATE OR REPLACE FUNCTION public.open_cash_register_session(
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path TO pg_catalog, public, private
+SET search_path TO ''
 AS $function$
 DECLARE
   v_actor uuid := auth.uid();
@@ -102,7 +102,7 @@ CREATE OR REPLACE FUNCTION public.close_cash_register_session(
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path TO pg_catalog, public, private
+SET search_path TO ''
 AS $function$
 DECLARE
   v_actor uuid := auth.uid();
