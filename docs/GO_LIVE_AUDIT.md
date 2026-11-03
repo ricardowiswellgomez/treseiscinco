@@ -117,6 +117,10 @@ La función es `SECURITY DEFINER` y ejecutable por `anon`. Por tanto, estos camp
 
 También se confirmó que las seis funciones `SECURITY DEFINER` accesibles por `anon` tienen actualmente `search_path=public, pg_temp`. La migración `20261102000500_harden_public_rpc_search_paths.sql` busca endurecer esa configuración; sigue pendiente de ensayo.
 
+### P2 — Integridad de métricas de instalación
+
+La función autenticada `record_platform_activity` registra actividad del propio usuario, pero el cliente puede enviar `p_event='pwa_installed'` o `p_is_standalone=true`. No hay una prueba independiente del sistema operativo que confirme la instalación. El panel ahora etiqueta esos valores como **PWA reportadas** y **Reporte de instalación**, no como instalaciones verificadas. No usar esta cifra como prueba de adopción real, facturación ni criterio de pago.
+
 ### P1 — Conciliación de caja por sesión
 
 La revisión de los RPC y formularios confirmó que se pueden registrar ventas, abonos y compras en efectivo sin comprobar que el usuario tenga una sesión de caja abierta. El cierre solo suma movimientos creados dentro del intervalo de una sesión; por tanto, el efectivo registrado antes de abrirla o después de cerrarla queda fuera de ese cierre. Esto no es una escritura no autorizada, pero sí una brecha de conciliación operativa. Antes de imponer un bloqueo, debe definirse si abrir caja será obligatorio para todo movimiento en efectivo o si la caja seguirá siendo opcional con un reporte explícito de movimientos sin sesión.
