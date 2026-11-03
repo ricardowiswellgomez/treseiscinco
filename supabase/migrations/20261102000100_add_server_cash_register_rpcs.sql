@@ -34,9 +34,21 @@ BEGIN
       NEW.created_by := auth.uid();
     END IF;
     IF NEW.payment_method = 'Efectivo' AND NEW.created_by IS NOT NULL THEN
+      -- Use the same lock as payment inserts and cash-session closing.
+      -- This makes the open-session check atomic with respect to a concurrent close.
       PERFORM pg_catalog.pg_advisory_xact_lock(
         pg_catalog.hashtextextended(NEW.business_id::text || ':' || NEW.created_by::text, 0)
       );
+      IF NOT EXISTS (
+        SELECT 1
+        FROM public.cash_register_sessions s
+        WHERE s.business_id = NEW.business_id
+          AND s.opened_by = NEW.created_by
+          AND s.status = 'open'
+      ) THEN
+        RAISE EXCEPTION 'Abre una caja antes de registrar un gasto en efectivo.'
+          USING ERRCODE = 'check_violation';
+      END IF;
       NEW.created_at := pg_catalog.clock_timestamp();
     END IF;
   ELSE
@@ -61,6 +73,23 @@ BEGIN
     PERFORM pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtextextended(NEW.business_id::text || ':' || v_actor::text, 0)
     );
+    -- The authenticated actor owns the drawer; never trust a client-supplied created_by.
+    IF auth.uid() IS NOT NULL THEN
+      NEW.created_by := auth.uid();
+      v_actor := auth.uid();
+    END IF;
+    -- Recheck after acquiring the same lock used by close_cash_register_session.
+    -- A payment waiting behind a close must fail rather than land outside the session.
+    IF NOT EXISTS (
+      SELECT 1
+      FROM public.cash_register_sessions s
+      WHERE s.business_id = NEW.business_id
+        AND s.opened_by = v_actor
+        AND s.status = 'open'
+    ) THEN
+      RAISE EXCEPTION 'Abre una caja antes de registrar un pago en efectivo.'
+        USING ERRCODE = 'check_violation';
+    END IF;
     -- now() is transaction-start time and may predate a lock wait.
     NEW.created_at := pg_catalog.clock_timestamp();
   END IF;
