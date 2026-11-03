@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { Script } from "node:vm";
 
 const workerSource = await readFile(new URL("../src/worker.js", import.meta.url), "utf8");
 const start = workerSource.indexOf('const signupSecurityScript="');
@@ -10,6 +11,7 @@ assert.ok(start >= 0 && end > start, "the injected auth CAPTCHA script must exis
 const assignment = workerSource.slice(start, end).trimEnd();
 const scriptLiteral = assignment.slice('const signupSecurityScript='.length, -1);
 const authScript = JSON.parse(scriptLiteral);
+assert.doesNotThrow(() => new Script(authScript), "the injected authentication script must be valid JavaScript");
 
 test("the same CAPTCHA widget protects sign-up, password login and recovery", () => {
   assert.ok(authScript.includes('function currentAuthForm()'));
