@@ -15,14 +15,11 @@ Se aplicaron cinco migraciones de endurecimiento en producción (privacidad del 
 ### Código y CI
 
 - PR #80 permanece abierto y en borrador.
-- GitHub Actions, ejecución **#506**, terminó en `success` sobre el HEAD previo: pasó instalación limpia, auditoría de dependencias de alta severidad, sintaxis del Worker, pruebas, build web, verificación de la ruta APK, APK instalable, icono de marca y validación de activos estáticos.
-- En #506, el job `build` terminó en `success` y el job `Deploy production Worker` quedó `skipped`, como corresponde a un evento de pull request. No se publicó el Worker.
-- Después de #506 se añadieron controles de sesión obligatoria para movimientos en efectivo, una corrección de identidad antes del bloqueo de concurrencia y pruebas de regresión.
-- GitHub Actions **#512 terminó en `success`** sobre el commit de código `e9ebe4e72012970930ea5deefcbb558c367c31fd`: instalación limpia, auditoría de dependencias de alta severidad, sintaxis del Worker, `npm test`, build web, verificación de la ruta Android, generación del APK, validación del icono oficial y carga de activos estáticos.
-- En #512, el job `Deploy production Worker` quedó `skipped`, correctamente por tratarse de un pull request. No se desplegó el Worker. La actualización posterior de este informe es solo documental y no altera el código probado: [ejecución #512](https://github.com/ricardowiswellgomez/treseiscinco/actions/runs/41681382217).
-- Artefacto `treseiscinco-dist`: 4.693.590 bytes; SHA-256 `ec875986547f6ca10d00cb765c0da27e6a47eac5499179ea838882679f6fb893`. Es un artefacto de prueba, expira el 4 de noviembre de 2026 y no se publicó en producción.
-- El artefacto Android de #494 es histórico y de prueba; no se publicó como APK de producción.
-- El artefacto `treseiscinco-apk` se generó correctamente (4.281.532 bytes; SHA-256 `489fd6566d39b7e997943c1ef7c2e74150dfe80e2df88b1c9766abdd2048898d`). Es un artefacto de prueba; no se publicó como APK de producción.
+- GitHub Actions **#526 falló** porque `tests/database-indexes.test.mjs` todavía leía el nombre anterior `20261102000600_add_missing_foreign_key_indexes.sql` después de alinear la migración con su versión real de producción. Las demás pruebas pasaron; el fallo no fue de la lógica de índices.
+- Se corrigió esa referencia en `tests/database-indexes.test.mjs` para leer `20261103173358_add_missing_foreign_key_indexes.sql`.
+- GitHub Actions **#528 terminó en `success`** sobre el HEAD de código `9f009f70e9a26d4b95309dd7e7ac44dfe119f4955`: instalación limpia, auditoría de dependencias de alta severidad, sintaxis del Worker, las 95 pruebas automatizadas, build web, verificación de la ruta Android, generación del APK, validación del icono oficial y carga de activos estáticos.
+- En #528, el job `Deploy production Worker` quedó `skipped`, correctamente por tratarse de un pull request. No se desplegó el Worker. La actualización documental posterior no modifica el código probado: [ejecución #528](https://github.com/ricardowiswellgomez/treseiscinco/actions/runs/41687163439).
+- Artefacto `treseiscinco-dist`: 4.693.595 bytes; SHA-256 `54f92252019f6828ec8b2cba5173eb39a4107a1b3a0dac83025b8bb19a672fcc`. Es un artefacto de prueba, expira el 4 de noviembre de 2026 y no se publicó en producción.
 - El despliegue del Worker se omitió correctamente porque el evento fue un pull request. El APK se incorpora al directorio `dist` del mismo build para publicarlo como activo estático.
 - `main` permanece en `a4c67b1d3f48b1eff59bdea729112f843bc7e459`.
 
@@ -138,7 +135,7 @@ Los movimientos históricos en efectivo que se registraron sin sesión no se asi
 
 ## Estado de salida
 
-- [ ] CI de la rama después de sincronizar los nombres de migración con las versiones aplicadas; #512 aprobó el código anterior a esos cambios de rutas.
+- [x] CI #528 aprobó las correcciones de rutas de migración y las pruebas del código actual; solo se añadió después una actualización documental.
 - [x] APK de prueba generada y validada.
 - [x] Reglas administradas gratuitas de Cloudflare desplegadas y verificadas por API.
 - [x] TLS/HTTPS/HSTS comprobados.
