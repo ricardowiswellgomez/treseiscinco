@@ -116,6 +116,10 @@ La función es `SECURITY DEFINER` y ejecutable por `anon`. Por tanto, estos camp
 
 También se confirmó que las seis funciones `SECURITY DEFINER` accesibles por `anon` tienen actualmente `search_path=public, pg_temp`. La migración `20261102000500_harden_public_rpc_search_paths.sql` busca endurecer esa configuración; sigue pendiente de ensayo.
 
+### P1 — Conciliación de caja por sesión
+
+La revisión de los RPC y formularios confirmó que se pueden registrar ventas, abonos y compras en efectivo sin comprobar que el usuario tenga una sesión de caja abierta. El cierre solo suma movimientos creados dentro del intervalo de una sesión; por tanto, el efectivo registrado antes de abrirla o después de cerrarla queda fuera de ese cierre. Esto no es una escritura no autorizada, pero sí una brecha de conciliación operativa. Antes de imponer un bloqueo, debe definirse si abrir caja será obligatorio para todo movimiento en efectivo o si la caja seguirá siendo opcional con un reporte explícito de movimientos sin sesión.
+
 ## Estado de salida
 
 - [x] CI del commit actual del PR aprobado.
@@ -125,6 +129,7 @@ También se confirmó que las seis funciones `SECURITY DEFINER` accesibles por `
 - [x] Privilegios directos sobre las cuatro tablas de métricas comprobados.
 - [ ] Historial de migraciones reconciliado y reproducible.
 - [ ] Corregir y verificar en ensayo la exposición de SKU, existencias exactas y metadatos internos del RPC público de catálogo.
+- [ ] Definir y probar la política de caja para pagos en efectivo sin sesión abierta.
 - [ ] Migraciones probadas en rama/entorno de desarrollo.
 - [ ] Pruebas transaccionales y de aislamiento multiempresa aprobadas.
 - [ ] CAPTCHA nativo y protección de contraseñas filtradas activados en Supabase Auth.
