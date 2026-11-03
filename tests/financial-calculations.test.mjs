@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
   getSaleCostMinor,
+  getSaleNetItemRevenueRows,
   getSaleNetRevenueMinor,
   isSaleIncludedInProfitability
 } from "../src/lib/financial-calculations.js";
@@ -33,6 +34,34 @@ test("sale-level discounts are also excluded from net revenue", () => {
   const sale = { status: "paid", discount_minor: 1000 };
   const items = [{ line_total_minor: 11900, tax_minor: 1900, discount_minor: 500 }];
   assert.equal(getSaleNetRevenueMinor(sale, items), 8500);
+});
+
+test("sale-level discounts are allocated proportionally to item rows with exact minor-unit totals", () => {
+  const sale = { status: "paid", discount_minor: 1000 };
+  const items = [
+    { id: "a", item_name: "A", line_total_minor: 11900, tax_minor: 1900, discount_minor: 0 },
+    { id: "b", item_name: "B", line_total_minor: 5950, tax_minor: 950, discount_minor: 0 }
+  ];
+  const rows = getSaleNetItemRevenueRows(sale, items);
+  assert.deepEqual(rows.map((row) => row.revenue_minor), [9333, 4667]);
+  assert.equal(rows.reduce((sum, row) => sum + row.revenue_minor, 0), getSaleNetRevenueMinor(sale, items));
+});
+
+test("large discount allocations across many small lines never exceed the line base", () => {
+  const items = Array.from({ length: 100 }, (_, index) => ({
+    id: String(index), line_total_minor: 1, tax_minor: 0, discount_minor: 0
+  }));
+  const rows = getSaleNetItemRevenueRows({ discount_minor: 99 }, items);
+  assert.equal(rows.reduce((sum, row) => sum + row.revenue_minor, 0), 1);
+  assert.ok(rows.every((row) => row.revenue_minor >= 0 && row.revenue_minor <= 1));
+});
+
+test("the Rentabilidad cards and product breakdown use net item revenue", () => {
+  assert.ok(appSource.includes("getSaleNetItemRevenueRows(sale, profitabilityItemsBySale.get(sale.id) || [])"));
+  assert.ok(appSource.includes("const profitLineRevenue = profitNetItemRows.reduce"));
+  assert.ok(appSource.includes("groups[name].revenue += Number(item.net_revenue_minor || 0)"));
+  assert.doesNotMatch(appSource, /const profitLineRevenue = periodSaleItems\.reduce/);
+  assert.doesNotMatch(appSource, /groups\[name\]\.revenue \+= Number\(item\.line_total_minor/);
 });
 
 test("header fallback uses subtotal before tax rather than gross total", () => {
