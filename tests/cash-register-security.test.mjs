@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 
 const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const serverMigration = await readFile(new URL("../supabase/migrations/20261103173636_add_server_cash_register_rpcs.sql", import.meta.url), "utf8");
+const legacyGuardMigration = await readFile(new URL("../supabase/migrations/20261103175500_guard_cash_register_session_direct_writes.sql", import.meta.url), "utf8");
 const lockdownMigration = await readFile(new URL("../supabase/post-deploy/20261102000400_restrict_cash_register_direct_writes.sql", import.meta.url), "utf8");
 const dedupeMigration = await readFile(new URL("../supabase/migrations/20261103173747_deduplicate_cash_register_open_index.sql", import.meta.url), "utf8");
 
@@ -88,6 +89,25 @@ test("only one equivalent unique open-session index remains", () => {
   assert.match(serverMigration, /CREATE UNIQUE INDEX IF NOT EXISTS cash_register_sessions_one_open_per_user_idx/);
   assert.match(dedupeMigration, /DROP INDEX IF EXISTS public\.cash_register_sessions_one_open_per_user_idx/);
   assert.match(dedupeMigration, /Keep the original unique open-session index/);
+});
+
+test("legacy cash session writes are normalized and closed sessions become immutable", () => {
+  assert.match(legacyGuardMigration, /CREATE OR REPLACE FUNCTION private\.guard_cash_register_session_write\(\)/);
+  assert.match(legacyGuardMigration, /SECURITY DEFINER[\s\S]*SET search_path TO ''/);
+  assert.match(legacyGuardMigration, /NEW\.opened_by := v_actor/);
+  assert.match(legacyGuardMigration, /NEW\.currency_code := v_currency_code/);
+  assert.match(legacyGuardMigration, /NEW\.status := 'open'/);
+  assert.match(legacyGuardMigration, /NEW\.opened_at := pg_catalog\.clock_timestamp\(\)/);
+  assert.match(legacyGuardMigration, /OLD\.status <> 'open' OR NEW\.status <> 'closed'/);
+  assert.match(legacyGuardMigration, /NEW\.business_id IS DISTINCT FROM OLD\.business_id/);
+  assert.match(legacyGuardMigration, /pg_advisory_xact_lock/);
+  assert.match(legacyGuardMigration, /sp\.created_at >= OLD\.opened_at[\s\S]*sp\.created_at <= v_close_at/);
+  assert.match(legacyGuardMigration, /pp\.created_at >= OLD\.opened_at[\s\S]*pp\.created_at <= v_close_at/);
+  assert.match(legacyGuardMigration, /e\.created_at >= OLD\.opened_at[\s\S]*e\.created_at <= v_close_at/);
+  assert.match(legacyGuardMigration, /NEW\.expected_cash_minor := v_expected/);
+  assert.match(legacyGuardMigration, /NEW\.closed_by := coalesce\(v_actor, NEW\.closed_by\)/);
+  assert.match(legacyGuardMigration, /BEFORE INSERT OR UPDATE ON public\.cash_register_sessions/);
+  assert.match(legacyGuardMigration, /REVOKE ALL ON FUNCTION private\.guard_cash_register_session_write\(\) FROM PUBLIC, anon, authenticated/);
 });
 
 test("cash sessions are audited and direct API writes are removed after rollout", () => {
