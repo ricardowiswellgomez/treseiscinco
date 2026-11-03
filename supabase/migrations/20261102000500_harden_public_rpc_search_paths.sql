@@ -9,7 +9,7 @@ BEGIN
   FOR v_function, v_path IN
     SELECT
       p.oid::regprocedure,
-      pg_catalog.btrim(pg_catalog.substring(cfg.setting FROM length('search_path=') + 1))
+      pg_catalog.btrim(pg_catalog.substr(cfg.setting, length('search_path=') + 1))
     FROM pg_catalog.pg_proc p
     JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
     CROSS JOIN LATERAL pg_catalog.unnest(coalesce(p.proconfig, ARRAY[]::text[])) AS cfg(setting)
@@ -20,7 +20,7 @@ BEGIN
         OR pg_catalog.has_function_privilege('authenticated', p.oid, 'EXECUTE')
       )
       AND cfg.setting LIKE 'search_path=%'
-      AND pg_catalog.btrim(pg_catalog.substring(cfg.setting FROM length('search_path=') + 1)) !~ '(^|,)[[:space:]]*pg_temp[[:space:]]*$'
+      AND pg_catalog.btrim(pg_catalog.substr(cfg.setting, length('search_path=') + 1)) !~ '(^|,)[[:space:]]*pg_temp[[:space:]]*$'
       AND NOT coalesce(p.proconfig, ARRAY[]::text[]) @> ARRAY['search_path=""']
   LOOP
     EXECUTE pg_catalog.format(
