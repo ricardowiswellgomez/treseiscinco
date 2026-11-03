@@ -78,12 +78,13 @@ Documentación oficial:
 - [Supabase CAPTCHA protection](https://supabase.com/docs/guides/auth/auth-captcha)
 - [Leaked password protection](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection)
 
-### P1 — MFA y rama protegida
+### P1 — MFA, rama protegida y secreto de despliegue
 
 Una persona titular/administradora debe:
 - Activar MFA en la cuenta Cloudflare y guardar códigos de recuperación fuera del equipo principal.
 - Verificar/activar MFA en GitHub y Supabase.
 - En GitHub, configurar protección para `main`: exigir pull requests, bloquear force-push y borrado, y exigir el check `build`. Exigir una aprobación solo si hay otra persona disponible para revisar; no imponer una regla que impida al único mantenedor fusionar sus propios cambios.
+- En GitHub Actions, crear el secreto de repositorio `CLOUDFLARE_API_TOKEN` con un token de Cloudflare de alcance mínimo para desplegar el Worker `treseiscinco`. El workflow ahora falla explícitamente si ese secreto falta; no puede dar éxito sin publicar el Worker.
 
 Documentación:
 - [GitHub protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
@@ -113,6 +114,7 @@ Estas capacidades no están terminadas y no deben presentarse como contabilidad 
 - [ ] CAPTCHA nativo y protección de contraseñas filtradas activados en Supabase Auth.
 - [ ] MFA de Cloudflare, GitHub y Supabase verificado.
 - [ ] Protección de rama `main` y check `build` obligatorios.
+- [ ] Secreto `CLOUDFLARE_API_TOKEN` creado en GitHub Actions para publicar el Worker al fusionar.
 - [ ] SQL posdespliegue de caja ejecutado tras pruebas.
 - [x] `package-lock.json` comprometido y CI migrado a `npm ci` (#485 aprobó la instalación y los tests; #486 verifica el workflow simplificado).
 - [ ] CSP aplicada tras proteger los scripts de la app y de impresión.
