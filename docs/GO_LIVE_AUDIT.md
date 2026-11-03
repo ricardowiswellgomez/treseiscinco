@@ -35,6 +35,7 @@ Se aplicaron cinco migraciones de endurecimiento en producción (privacidad del 
   - `20261103173358_add_missing_foreign_key_indexes.sql`
   - `20261103173636_add_server_cash_register_rpcs.sql`
   - `20261103173747_deduplicate_cash_register_open_index.sql`
+  - `20261103175500_guard_cash_register_session_direct_writes.sql`
 - También existe el SQL posdespliegue `supabase/post-deploy/20261102000400_restrict_cash_register_direct_writes.sql`. No debe ejecutarse hasta que el nuevo frontend/Worker esté activo y la apertura/cierre de caja haya sido comprobada.
 - El asesor de rendimiento ya no informa claves foráneas sin índice ni avisos `auth_rls_initplan`: las 17 claves están cubiertas y las dos políticas de caja evalúan `auth.uid()` una vez por sentencia. También se eliminó el índice único duplicado de sesiones. Quedan avisos INFO de índices no usados; no se eliminan sin métricas reales de carga.
 - Cuatro tablas de métricas de plataforma tienen RLS habilitado sin políticas. La consulta de privilegios confirmó que `anon` y `authenticated` no tienen permisos directos sobre ellas. El aviso es informativo y no se deben crear políticas de lectura abiertas para silenciarlo.
@@ -46,6 +47,7 @@ Se aplicaron cinco migraciones de endurecimiento en producción (privacidad del 
 ### Cloudflare — zona y Worker
 
 - La zona `treseiscinco.com` está activa; los dominios raíz y `www` están vinculados al Worker `treseiscinco`.
+- El Worker `treseiscinco` sigue sirviendo la versión **187**, desplegada el 30 de octubre de 2026. El build de PR #528/#529 no desplegó el Worker; la nueva interfaz todavía no está publicada.
 - HTTPS forzado está activo; versión mínima TLS 1.2 y TLS 1.3 está habilitado.
 - HSTS está activo en la zona. La política de zona tiene `max_age=15552000`, `include_subdomains=false`; el Worker devuelve además `Strict-Transport-Security: max-age=31536000`.
 - El ajuste antiguo `waf` devuelve el error 1027 de Cloudflare: está obsoleto y debe usarse Rulesets. No volver a intentar activarlo.
@@ -131,6 +133,12 @@ El guardado y el cierre comparten el mismo bloqueo transaccional. Si un pago que
 
 Una venta o compra sin abono inicial puede seguir registrándose sin caja; el usuario deberá abrirla antes de registrar un abono en efectivo. Los pagos bancarios/electrónicos no quedan sujetos a esta regla. La migración `20261103173636_add_server_cash_register_rpcs.sql` ya está aplicada en producción. La prueba transaccional con rol `authenticated` verificó apertura/cierre, cálculo del efectivo esperado, rechazo de abonos sin caja y tras el cierre, atribución del creador de gastos y conciliación del gasto. El ensayo terminó con `ROLLBACK` y se comprobó que no alteró ventas, pagos, gastos ni sesiones existentes.
 
+### Compatibilidad segura mientras se actualiza la interfaz — corregido en producción
+
+La interfaz publicada todavía usa las escrituras directas antiguas para abrir/cerrar cajas. No se revocaron sus permisos porque habría roto ese frontend antes de publicar la versión nueva. Para evitar que el cliente pueda falsificar aperturas o cierres, se aplicó `20261103175500_guard_cash_register_session_direct_writes.sql`: PostgreSQL fija el usuario, la moneda y la hora de apertura; solo permite la transición `open → closed`; recalcula el efectivo desde pagos de ventas, pagos a proveedores y gastos usando `created_at`; ignora el total esperado/fecha/usuario de cierre enviados por el navegador; y bloquea cambios posteriores sobre cajas cerradas.
+
+La prueba transaccional posterior a la aplicación simuló el INSERT y UPDATE del frontend antiguo con valores falsos; el servidor los normalizó y calculó el efectivo correcto. También probó la ruta nueva de RPC con la misma protección. Ambas rutas terminaron en `ROLLBACK`; se verificó que no quedaron cajas, pagos o gastos de prueba.
+
 Los movimientos históricos en efectivo que se registraron sin sesión no se asignan automáticamente a una caja. La consulta de producción del 3 de noviembre de 2026 encontró un único caso: venta `VTA-20261023-1A5B0373`, por **$44.000 COP**, con pago en efectivo creado el 23 de octubre de 2026 a las 06:07 UTC (01:07, hora de Colombia). No existe una sesión que cubra ese momento; la única sesión registrada se abrió el 28 de octubre de 2026 y está cerrada. No se modificó el pago ni se atribuyó retroactivamente a esa caja. Debe revisarse y conciliarse manualmente antes de considerar cerrada la diferencia histórica.
 
 ## Estado de salida
@@ -144,10 +152,10 @@ Los movimientos históricos en efectivo que se registraron sin sesión no se asi
 - [x] Privacidad del catálogo corregida y verificada con rol anónimo en producción.
 - [x] `search_path` de funciones expuestas endurecido y verificado.
 - [x] 17 índices de claves foráneas creados y verificados; avisos de FK/RLS initplan eliminados.
-- [x] Caja segura aplicada y probada en transacción reversible con rol autenticado.
+- [x] Caja segura y compatible con ambas interfaces: RPC nueva y escrituras directas antiguas protegidas por trigger; ensayo reversible posterior a la aplicación aprobado.
 - [ ] Rama de ensayo aislada y pruebas integrales multiempresa; no creada por falta de medio de pago/costo confirmado.
 - [ ] Conciliar manualmente el pago histórico de $44.000 sin sesión.
-- [ ] SQL posdespliegue de revocación de escrituras directas aplicado tras desplegar la nueva interfaz.
+- [ ] Publicar la nueva interfaz/Worker; después ejecutar el SQL posdespliegue que revoca escrituras directas de caja.
 - [ ] Pruebas transaccionales y de aislamiento multiempresa aprobadas.
 - [ ] CAPTCHA nativo y protección de contraseñas filtradas activados en Supabase Auth.
 - [ ] MFA de Cloudflare, GitHub y Supabase verificado.
