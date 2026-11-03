@@ -123,7 +123,8 @@ También se confirmó que las seis funciones `SECURITY DEFINER` accesibles por `
 - [x] Reglas administradas gratuitas de Cloudflare desplegadas y verificadas por API.
 - [x] TLS/HTTPS/HSTS comprobados.
 - [x] Privilegios directos sobre las cuatro tablas de métricas comprobados.
-- [ ] Historial de migraciones reconciliado y reproducible.\n- [ ] Corregir y verificar en ensayo la exposición de SKU, existencias exactas y metadatos internos del RPC público de catálogo.
+- [ ] Historial de migraciones reconciliado y reproducible.
+- [ ] Corregir y verificar en ensayo la exposición de SKU, existencias exactas y metadatos internos del RPC público de catálogo.
 - [ ] Migraciones probadas en rama/entorno de desarrollo.
 - [ ] Pruebas transaccionales y de aislamiento multiempresa aprobadas.
 - [ ] CAPTCHA nativo y protección de contraseñas filtradas activados en Supabase Auth.
