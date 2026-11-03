@@ -170,3 +170,7 @@ Los movimientos históricos en efectivo que se registraron sin sesión no se asi
 - [ ] Conciliación bancaria, devoluciones y contabilidad formal diseñadas/implementadas.
 
 **No declarar Treseiscinco listo para pagos reales hasta cerrar todos los P0 y probar los flujos financieros en un entorno aislado.**
+
+
+## Nota de vigencia — CI #544
+Las cifras que prevalecen para dependencias y pruebas son las de #544: auditoría `low` con 0 vulnerabilidades y 99/99 pruebas. La CSP está aplicada en el código de la rama, no en producción. El nuevo lockfile se genera como artefacto temporal y aún no está versionado. El Worker de producción y `main` permanecen sin cambios.
