@@ -116,5 +116,4 @@ begin
     'business',v_business,'products',v_products,'categories',v_categories,
     'total',v_total,'limit',p_limit,'offset',p_offset
   );
-end;$function$
-
+end;$function$;
