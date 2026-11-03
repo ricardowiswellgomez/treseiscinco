@@ -1,14 +1,18 @@
 -- Add trusted server-side cash register operations.
 -- Supporting indexes for one-user cash sessions and cash-only close aggregation.
+-- Enforce one open drawer per user and business, including legacy/direct writers.
+CREATE UNIQUE INDEX IF NOT EXISTS cash_register_sessions_one_open_per_user_idx
+  ON public.cash_register_sessions (business_id, opened_by)
+  WHERE status = 'open';
 CREATE INDEX IF NOT EXISTS cash_register_sessions_opened_by_idx
   ON public.cash_register_sessions (opened_by);
 CREATE INDEX IF NOT EXISTS cash_register_sessions_closed_by_idx
   ON public.cash_register_sessions (closed_by);
 CREATE INDEX IF NOT EXISTS sale_payments_cash_session_idx
-  ON public.sale_payments (business_id, created_by, paid_at)
+  ON public.sale_payments (business_id, created_by, created_at)
   WHERE payment_method = 'Efectivo';
 CREATE INDEX IF NOT EXISTS purchase_payments_cash_session_idx
-  ON public.purchase_payments (business_id, created_by, paid_at)
+  ON public.purchase_payments (business_id, created_by, created_at)
   WHERE payment_method = 'Efectivo';
 CREATE INDEX IF NOT EXISTS expenses_cash_session_idx
   ON public.expenses (business_id, created_by, created_at)
@@ -154,8 +158,10 @@ BEGIN
   WHERE sp.business_id = p_business_id
     AND sp.created_by = v_session.opened_by
     AND sp.payment_method = 'Efectivo'
-    AND sp.paid_at >= v_session.opened_at
-    AND sp.paid_at <= now();
+    -- Attribute cash to the drawer when it is recorded, not by the editable
+    -- accounting date (paid_at is date-only in the UI and may be backdated).
+    AND sp.created_at >= v_session.opened_at
+    AND sp.created_at <= now();
 
   SELECT coalesce(sum(pp.amount_minor), 0), count(*)
   INTO v_purchases, v_purchase_count
@@ -163,8 +169,10 @@ BEGIN
   WHERE pp.business_id = p_business_id
     AND pp.created_by = v_session.opened_by
     AND pp.payment_method = 'Efectivo'
-    AND pp.paid_at >= v_session.opened_at
-    AND pp.paid_at <= now();
+    -- Keep the financial paid_at date for reports, but use creation time for
+    -- the physical cash drawer session.
+    AND pp.created_at >= v_session.opened_at
+    AND pp.created_at <= now();
 
   SELECT coalesce(sum(e.amount_minor), 0), count(*)
   INTO v_expenses, v_expense_count
