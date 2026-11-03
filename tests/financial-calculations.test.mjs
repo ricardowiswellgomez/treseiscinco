@@ -1,10 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+const appSource = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+
 import {
   getSaleCostMinor,
   getSaleNetRevenueMinor,
   isSaleIncludedInProfitability
 } from "../src/lib/financial-calculations.js";
+
+test("profitability loads tax and discount columns from both sales and sale items", () => {
+  assert.ok(appSource.includes('from("sales").select("id,business_id,status,currency_code,subtotal_minor,discount_minor,tax_minor,total_minor,amount_paid_minor,sold_at,created_at")'));
+  assert.ok(appSource.includes('.select("id,sale_id,product_id,item_name,quantity,unit_cost_minor,discount_minor,tax_minor,line_total_minor")'));
+});
 
 test("profitability excludes drafts, cancellations and refunds", () => {
   for (const status of ["draft", "canceled", "cancelled", "refunded", "CANCELED"]) {
