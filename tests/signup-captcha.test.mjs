@@ -4,9 +4,11 @@ import { readFile } from "node:fs/promises";
 
 const workerSource = await readFile(new URL("../src/worker.js", import.meta.url), "utf8");
 const start = workerSource.indexOf('const signupSecurityScript="');
-const end = workerSource.indexOf('";const patched=', start);
+const lineEnd = workerSource.indexOf("\n", start);
+const end = lineEnd >= 0 ? lineEnd : workerSource.length;
 assert.ok(start >= 0 && end > start, "the injected auth CAPTCHA script must exist");
-const scriptLiteral = workerSource.slice(start + 'const signupSecurityScript='.length, end + 1);
+const assignment = workerSource.slice(start, end).trimEnd();
+const scriptLiteral = assignment.slice('const signupSecurityScript='.length, -1);
 const authScript = JSON.parse(scriptLiteral);
 
 test("the same CAPTCHA widget protects sign-up, password login and recovery", () => {
