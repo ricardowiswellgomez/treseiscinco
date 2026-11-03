@@ -59,6 +59,29 @@ test("server close calculation includes cash sales, supplier payments and expens
   assert.equal((serverMigration.match(/SET search_path TO ''/g) || []).length, 4);
 });
 
+test("cash payments and expenses require the actor's open session under the same close lock", () => {
+  const paymentStart = serverMigration.indexOf("CREATE OR REPLACE FUNCTION private.lock_cash_register_payment()");
+  const paymentEnd = serverMigration.indexOf("$function$;", paymentStart);
+  const paymentGuard = serverMigration.slice(paymentStart, paymentEnd);
+  assert.ok(paymentStart >= 0 && paymentEnd > paymentStart);
+  assert.match(paymentGuard, /pg_advisory_xact_lock/);
+  assert.match(paymentGuard, /NEW\.created_by := auth\.uid\(\)/);
+  assert.match(paymentGuard, /FROM public\.cash_register_sessions/);
+  assert.match(paymentGuard, /s\.opened_by = v_actor/);
+  assert.match(paymentGuard, /s\.status = 'open'/);
+  assert.match(paymentGuard, /Abre una caja antes de registrar un pago en efectivo/);
+
+  const expenseStart = serverMigration.indexOf("CREATE OR REPLACE FUNCTION private.set_expense_created_by()");
+  const expenseEnd = serverMigration.indexOf("$function$;", expenseStart);
+  const expenseGuard = serverMigration.slice(expenseStart, expenseEnd);
+  assert.ok(expenseStart >= 0 && expenseEnd > expenseStart);
+  assert.match(expenseGuard, /pg_advisory_xact_lock/);
+  assert.match(expenseGuard, /FROM public\.cash_register_sessions/);
+  assert.match(expenseGuard, /s\.opened_by = NEW\.created_by/);
+  assert.match(expenseGuard, /s\.status = 'open'/);
+  assert.match(expenseGuard, /Abre una caja antes de registrar un gasto en efectivo/);
+});
+
 test("cash sessions are audited and direct API writes are removed after rollout", () => {
   assert.match(serverMigration, /CREATE TRIGGER audit_business_changes/);
   assert.ok(lockdownMigration.includes("REVOKE INSERT (id, business_id, opened_by, closed_by, currency_code,"));
