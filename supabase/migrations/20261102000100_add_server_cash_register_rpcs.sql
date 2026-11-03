@@ -84,11 +84,20 @@ BEFORE INSERT OR UPDATE OF created_by ON public.expenses
 FOR EACH ROW EXECUTE FUNCTION private.set_expense_created_by();
 
 DROP POLICY IF EXISTS expenses_insert_by_permission ON public.expenses;
+-- The frontend sends bank_account_id (including NULL) with every expense.
+-- Grant only that column; the AFTER trigger validates business, active status,
+-- currency, opening date and manager rights before creating a bank movement.
+GRANT INSERT (bank_account_id) ON TABLE public.expenses TO authenticated;
+
 CREATE POLICY expenses_insert_by_permission
 ON public.expenses FOR INSERT TO authenticated
 WITH CHECK (
   created_by = (select auth.uid())
   AND private.can_access_business(business_id, 'expenses_manage')
+  AND (
+    bank_account_id IS NULL
+    OR (payment_method <> 'Efectivo' AND private.can_manage_members(business_id))
+  )
 );
 
 -- Direct INSERT/UPDATE grants are revoked in a follow-up migration after the
