@@ -49,8 +49,10 @@ test("server close calculation includes cash sales, supplier payments and expens
   assert.match(serverMigration, /e\.created_at <= v_close_at/);
   assert.match(serverMigration, /NEW\.created_at := pg_catalog\.clock_timestamp\(\)/);
   assert.match(serverMigration, /v_opened_at := pg_catalog\.clock_timestamp\(\)/);
+  assert.match(serverMigration, /hashtextextended\(p_business_id::text \|\| ':' \|\| v_actor::text, 0\)/);
+  assert.match(serverMigration, /hashtextextended\(p_business_id::text \|\| ':' \|\| v_session_owner::text, 0\)/);
   assert.match(serverMigration, /created_by = auth\.uid\(\)[\s\S]*private\.can_access_business\(business_id, 'expenses_manage'\)/);
-  assert.equal((serverMigration.match(/SET search_path TO ''/g) || []).length, 3);
+  assert.equal((serverMigration.match(/SET search_path TO ''/g) || []).length, 4);
 });
 
 test("cash sessions are audited and direct API writes are removed after rollout", () => {
