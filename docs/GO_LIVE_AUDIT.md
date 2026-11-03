@@ -30,7 +30,7 @@ Se aplicaron cinco migraciones de endurecimiento en producción (privacidad del 
 
 - El proyecto está en estado `ACTIVE_HEALTHY`, PostgreSQL 17.
 - Historial remoto: **99 migraciones**. Las cinco últimas son las nuevas correcciones de privacidad, `search_path`, índices, caja y limpieza del índice duplicado; la última es `20261103173747 deduplicate_cash_register_open_index`.
-- Rama revisada: **52 archivos SQL** en `supabase/migrations`. Solo se encontraron 43 nombres que coinciden al normalizarlos y retirar los prefijos de fecha; además hay nombres repetidos. Esto no demuestra equivalencia de SQL ni permite reparar el historial con seguridad.
+- El repositorio no contiene una copia íntegra y ordenada de todo el historial remoto. Se alinearon los cinco archivos de endurecimiento con las versiones reales que Supabase registró, pero todavía quedan migraciones históricas ausentes o con nombres/versiones distintos. Esto impide declarar reproducible una reconstrucción completa desde cero.
 - **No ejecutar `supabase db push`, ni insertar/eliminar filas de `supabase_migrations.schema_migrations` manualmente.** No se debe marcar como aplicada una migración sin demostrar que su contenido ya está reflejado en el esquema.
 - La rama contiene cinco migraciones que ya constan en el historial remoto:
   - `20261103173103_redact_public_catalog_internal_fields.sql`
