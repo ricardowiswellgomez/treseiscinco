@@ -50,4 +50,5 @@ test("storefront UI uses availability only as a display boolean and leaves stock
   }
   assert.ok(storefront.includes("product.is_out_of_stock"));
   assert.ok(storefront.includes("public-checkout"));
+  assert.ok(!storefront.includes("código…"), "public search must not promise internal SKU lookup");
 });
