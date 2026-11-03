@@ -57,9 +57,10 @@ export function getSaleNetRevenueMinor(sale, items = []) {
   const rows = Array.isArray(items) ? items : [];
   let revenue;
   if (rows.length) {
-    revenue = getSaleNetItemRevenueRows(sale, rows)
+    return getSaleNetItemRevenueRows(sale, rows)
       .reduce((sum, row) => sum + row.revenue_minor, 0);
-  } else if (sale?.subtotal_minor != null) {
+  }
+  if (sale?.subtotal_minor != null) {
     revenue = minor(sale.subtotal_minor);
   } else {
     revenue = minor(sale?.total_minor) - minor(sale?.tax_minor);
