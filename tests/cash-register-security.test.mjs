@@ -36,7 +36,11 @@ test("server close calculation includes cash sales, supplier payments and expens
   assert.doesNotMatch(serverMigration, /pp\.paid_at >= v_session\.opened_at/);
   assert.match(serverMigration, /ON public\.sale_payments \(business_id, created_by, created_at\)/);
   assert.match(serverMigration, /ON public\.purchase_payments \(business_id, created_by, created_at\)/);
-  assert.equal((serverMigration.match(/SET search_path TO ''/g) || []).length, 2);
+  assert.match(serverMigration, /ALTER TABLE public\.expenses[\s\S]*ALTER COLUMN created_by SET DEFAULT auth\.uid\(\)/);
+  assert.match(serverMigration, /CREATE OR REPLACE FUNCTION private\.set_expense_created_by\(\)/);
+  assert.match(serverMigration, /BEFORE INSERT OR UPDATE OF created_by ON public\.expenses/);
+  assert.match(serverMigration, /created_by = auth\.uid\(\)[\s\S]*private\.can_access_business\(business_id, 'expenses_manage'\)/);
+  assert.equal((serverMigration.match(/SET search_path TO ''/g) || []).length, 3);
 });
 
 test("cash sessions are audited and direct API writes are removed after rollout", () => {
