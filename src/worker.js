@@ -75,8 +75,7 @@ try{rate=await env.SIGNUP_LIMITER.limit({key:"treseiscinco-signup:"+ip})}catch{r
 if(!rate.success)return send({msg:"Has intentado crear varias cuentas seguidas. Espera un minuto e inténtalo de nuevo."},429);
 const captchaToken=String(req.headers.get("x-turnstile-token")||"");
 if(!captchaToken||captchaToken.length>2048)return send({msg:"Completa la verificación de seguridad para crear tu cuenta."},403);
-// Supabase Auth verifies this single-use token using its native CAPTCHA setting.
-// Pass the verified token in Supabase Auth's native CAPTCHA field as well.
+// Let Supabase Auth verify this single-use token through its native CAPTCHA setting.
 const signupBody=JSON.stringify({...data,gotrue_meta_security:{captcha_token:captchaToken}});
 const headers=new Headers();
 for(const name of ["authorization","content-type","accept","x-client-info","x-supabase-api-version"]){const value=req.headers.get(name);if(value)headers.set(name,value)}
