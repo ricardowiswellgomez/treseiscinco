@@ -26,7 +26,7 @@ Se aplicaron cinco migraciones de endurecimiento en producción (privacidad del 
 ### Supabase — base de datos
 
 - El proyecto está en estado `ACTIVE_HEALTHY`, PostgreSQL 17.
-- Historial remoto: **99 migraciones**. Las cinco últimas son las nuevas correcciones de privacidad, `search_path`, índices, caja y limpieza del índice duplicado; la última es `20261103173747 deduplicate_cash_register_open_index`.
+- Historial remoto: **100 migraciones**. Las seis últimas son las correcciones de privacidad, `search_path`, índices, caja, limpieza del índice duplicado y compatibilidad de la interfaz antigua; la última es `20261103175507 guard_cash_register_session_direct_writes`.
 - El repositorio no contiene una copia íntegra y ordenada de todo el historial remoto. Se alinearon los cinco archivos de endurecimiento con las versiones reales que Supabase registró, pero todavía quedan migraciones históricas ausentes o con nombres/versiones distintos. Esto impide declarar reproducible una reconstrucción completa desde cero.
 - **No ejecutar `supabase db push`, ni insertar/eliminar filas de `supabase_migrations.schema_migrations` manualmente.** No se debe marcar como aplicada una migración sin demostrar que su contenido ya está reflejado en el esquema.
 - La rama contiene cinco migraciones que ya constan en el historial remoto:
@@ -35,7 +35,7 @@ Se aplicaron cinco migraciones de endurecimiento en producción (privacidad del 
   - `20261103173358_add_missing_foreign_key_indexes.sql`
   - `20261103173636_add_server_cash_register_rpcs.sql`
   - `20261103173747_deduplicate_cash_register_open_index.sql`
-  - `20261103175500_guard_cash_register_session_direct_writes.sql`
+  - `20261103175507_guard_cash_register_session_direct_writes.sql`
 - También existe el SQL posdespliegue `supabase/post-deploy/20261102000400_restrict_cash_register_direct_writes.sql`. No debe ejecutarse hasta que el nuevo frontend/Worker esté activo y la apertura/cierre de caja haya sido comprobada.
 - El asesor de rendimiento ya no informa claves foráneas sin índice ni avisos `auth_rls_initplan`: las 17 claves están cubiertas y las dos políticas de caja evalúan `auth.uid()` una vez por sentencia. También se eliminó el índice único duplicado de sesiones. Quedan avisos INFO de índices no usados; no se eliminan sin métricas reales de carga.
 - Cuatro tablas de métricas de plataforma tienen RLS habilitado sin políticas. La consulta de privilegios confirmó que `anon` y `authenticated` no tienen permisos directos sobre ellas. El aviso es informativo y no se deben crear políticas de lectura abiertas para silenciarlo.
@@ -135,7 +135,7 @@ Una venta o compra sin abono inicial puede seguir registrándose sin caja; el us
 
 ### Compatibilidad segura mientras se actualiza la interfaz — corregido en producción
 
-La interfaz publicada todavía usa las escrituras directas antiguas para abrir/cerrar cajas. No se revocaron sus permisos porque habría roto ese frontend antes de publicar la versión nueva. Para evitar que el cliente pueda falsificar aperturas o cierres, se aplicó `20261103175500_guard_cash_register_session_direct_writes.sql`: PostgreSQL fija el usuario, la moneda y la hora de apertura; solo permite la transición `open → closed`; recalcula el efectivo desde pagos de ventas, pagos a proveedores y gastos usando `created_at`; ignora el total esperado/fecha/usuario de cierre enviados por el navegador; y bloquea cambios posteriores sobre cajas cerradas.
+La interfaz publicada todavía usa las escrituras directas antiguas para abrir/cerrar cajas. No se revocaron sus permisos porque habría roto ese frontend antes de publicar la versión nueva. Para evitar que el cliente pueda falsificar aperturas o cierres, se aplicó `20261103175507_guard_cash_register_session_direct_writes.sql`: PostgreSQL fija el usuario, la moneda y la hora de apertura; solo permite la transición `open → closed`; recalcula el efectivo desde pagos de ventas, pagos a proveedores y gastos usando `created_at`; ignora el total esperado/fecha/usuario de cierre enviados por el navegador; y bloquea cambios posteriores sobre cajas cerradas.
 
 La prueba transaccional posterior a la aplicación simuló el INSERT y UPDATE del frontend antiguo con valores falsos; el servidor los normalizó y calculó el efectivo correcto. También probó la ruta nueva de RPC con la misma protección. Ambas rutas terminaron en `ROLLBACK`; se verificó que no quedaron cajas, pagos o gastos de prueba.
 
