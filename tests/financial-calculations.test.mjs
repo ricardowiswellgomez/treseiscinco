@@ -73,7 +73,7 @@ test("the Rentabilidad cards and product breakdown use net item revenue", () => 
   assert.ok(appSource.includes("groups[name].revenue += Number(item.net_revenue_minor || 0)"));
   assert.doesNotMatch(appSource, /const profitLineRevenue = periodSaleItems\.reduce/);
   assert.doesNotMatch(appSource, /groups\[name\]\.revenue \+= Number\(item\.line_total_minor/);
-  assert.ok(appSource.includes("Object.values(profitNetItemRows.reduce((groups, item) => {")));
+  assert.ok(appSource.includes("Object.values(profitNetItemRows.reduce((groups, item) => {"));
 });
 
 test("header fallback uses subtotal before tax rather than gross total", () => {
