@@ -16,6 +16,7 @@ test("public catalog JSON does not disclose internal inventory quantities, SKU o
   assert.ok(!migration.includes("p.sku"), "the public catalog must not search by internal SKU");
   assert.ok(!migration.includes("p.metadata"), "the public catalog must not select private product metadata");
   assert.ok(migration.trimEnd().endsWith("$function$;"), "the SQL function definition must be terminated");
+  assert.ok(migration.includes("SET search_path TO ''"), "SECURITY DEFINER catalog function must use an empty search path");
 });
 
 test("storefront UI uses availability only as a display boolean and leaves stock validation to checkout", () => {
