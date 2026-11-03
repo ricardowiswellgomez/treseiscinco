@@ -70,7 +70,6 @@ begin
     and (v_search='' or
       p.name ilike '%'||replace(replace(replace(v_search,'\','\\'),'%','\%'),'_','\_')||'%' escape '\'
       or coalesce(p.description,'') ilike '%'||replace(replace(replace(v_search,'\','\\'),'%','\%'),'_','\_')||'%' escape '\'
-      or coalesce(p.sku,'') ilike '%'||replace(replace(replace(v_search,'\','\\'),'%','\%'),'_','\_')||'%' escape '\'
     );
 
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -89,7 +88,7 @@ begin
   ),'[]'::jsonb) into v_products
   from (
     select p.id,p.name,p.description,p.category_id,c.name as category_name,p.sale_price_minor,
-      p.unit_name,p.commercial_presentation,p.image_paths,p.track_inventory,p.stock_on_hand,p.metadata,
+      p.unit_name,p.commercial_presentation,p.image_paths,p.track_inventory,p.stock_on_hand,
       coalesce((select jsonb_agg(jsonb_build_object(
         'id',v.id,'variant_name',v.variant_name,'variant_value',v.variant_value,
         'sale_price_minor',v.sale_price_minor,'image_paths',v.image_paths
@@ -103,7 +102,6 @@ begin
       and (v_search='' or
         p.name ilike '%'||replace(replace(replace(v_search,'\','\\'),'%','\%'),'_','\_')||'%' escape '\'
         or coalesce(p.description,'') ilike '%'||replace(replace(replace(v_search,'\','\\'),'%','\%'),'_','\_')||'%' escape '\'
-        or coalesce(p.sku,'') ilike '%'||replace(replace(replace(v_search,'\','\\'),'%','\%'),'_','\_')||'%' escape '\'
       )
     order by
       case when v_sort='name_asc' then p.name end asc,
