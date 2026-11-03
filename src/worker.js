@@ -85,12 +85,15 @@ verification=await vr.json();
 }catch{return send({msg:"No pudimos validar la verificación. Inténtalo de nuevo."},403)}
 const hostname=String(verification?.hostname||"").toLowerCase();
 if(!verification?.success||verification?.action!=="signup"||!ALLOWED_SIGNUP_HOSTS.has(hostname))return send({msg:"La verificación de seguridad venció o no es válida. Complétala de nuevo."},403);
+// Pass the verified token in Supabase Auth's native CAPTCHA field as well.
+const signupBody=JSON.stringify({...data,gotrue_meta_security:{captcha_token:captchaToken}});
 const headers=new Headers();
 for(const name of ["authorization","content-type","accept","x-client-info","x-supabase-api-version"]){const value=req.headers.get(name);if(value)headers.set(name,value)}
 headers.set("apikey",PUBLISHABLE_KEY);
+headers.set("content-type","application/json");
 if(!headers.has("authorization"))headers.set("authorization","Bearer "+PUBLISHABLE_KEY);
 let upstream;
-try{upstream=await fetch(DB+"/auth/v1/signup"+u.search,{method:"POST",headers,body:raw,redirect:"manual",cf:{cacheTtl:0}})}
+try{upstream=await fetch(DB+"/auth/v1/signup"+u.search,{method:"POST",headers,body:signupBody,redirect:"manual",cf:{cacheTtl:0}})}
 catch{return send({msg:"No pudimos completar el registro ahora. Inténtalo de nuevo en unos segundos."},502)}
 const responseHeaders=new Headers(upstream.headers);
 responseHeaders.set("Cache-Control","no-store, no-cache, must-revalidate");
