@@ -15,7 +15,7 @@ No se aplicaron las migraciones del PR a producción ni se revocaron escrituras 
 ### Código y CI
 
 - PR #80 permanece abierto y en borrador.
-- HEAD probado: `62b715ca12147d1cfd2c1cc941b3f4182a0cc37a`.
+- Último commit documental de esta rama: `8506bd234d9d2bd9a079735d36fb222e810e3dc0`. La última ejecución completa confirmada antes de esta actualización fue #489; la ejecución #493 está en curso.
 - GitHub Actions, ejecución **#489**, terminó en `success`: auditoría de dependencias de alta severidad, sintaxis del Worker, pruebas, build web, verificación de la ruta APK, APK instalable, icono de marca y dry-run de Wrangler.
 - El artefacto `treseiscinco-apk` se generó correctamente (4.281.532 bytes; SHA-256 `48a5d2efd6412fde264565dc31f58532a2f6354b1cdcd4c5f550cf0a90d447af`). Es un artefacto de prueba; no se publicó como APK de producción.
 - El despliegue del Worker y la publicación del APK se omitieron correctamente porque el evento fue un pull request.
