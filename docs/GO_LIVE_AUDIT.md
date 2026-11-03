@@ -131,7 +131,7 @@ El guardado y el cierre comparten el mismo bloqueo transaccional. Si un pago que
 
 Una venta o compra sin abono inicial puede seguir registrándose sin caja; el usuario deberá abrirla antes de registrar un abono en efectivo. Los pagos bancarios/electrónicos no quedan sujetos a esta regla. **La corrección está en el PR, no en producción, y todavía requiere CI del HEAD actual y ensayo en una base aislada.**
 
-Los movimientos históricos en efectivo que se registraron sin sesión no se asignan automáticamente a una caja. Deben identificarse y conciliarse por separado antes de declarar completos los cierres históricos.
+Los movimientos históricos en efectivo que se registraron sin sesión no se asignan automáticamente a una caja. La consulta de producción del 3 de noviembre de 2026 encontró un único caso: venta `VTA-20261023-1A5B0373`, por **$44.000 COP**, con pago en efectivo creado el 23 de octubre de 2026 a las 06:07 UTC (01:07, hora de Colombia). No existe una sesión que cubra ese momento; la única sesión registrada se abrió el 28 de octubre de 2026 y está cerrada. No se modificó el pago ni se atribuyó retroactivamente a esa caja. Debe revisarse y conciliarse manualmente antes de considerar cerrada la diferencia histórica.
 
 ## Estado de salida
 
