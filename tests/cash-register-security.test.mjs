@@ -60,7 +60,6 @@ test("cash sessions are audited and direct API writes are removed after rollout"
   assert.ok(lockdownMigration.includes("REVOKE INSERT (id, business_id, opened_by, closed_by, currency_code,"));
   assert.ok(lockdownMigration.includes("UPDATE (id, business_id, opened_by, closed_by, currency_code,"));
   assert.ok(lockdownMigration.includes("ON TABLE public.cash_register_sessions\nFROM authenticated;"));
-  assert.match(lockdownMigration, /REVOKE INSERT \([\s\S]*?\),\s*UPDATE \([\s\S]*?\) ON TABLE public\.cash_register_sessions FROM authenticated/);
   assert.match(lockdownMigration, /DROP POLICY IF EXISTS cash_register_sessions_insert_by_permission/);
   assert.match(lockdownMigration, /DROP POLICY IF EXISTS cash_register_sessions_update_by_permission/);
 });
