@@ -90,7 +90,7 @@ Documentación:
 
 ### P1 — Cadena de suministro y CSP
 
-- Falta `package-lock.json` versionado y CI usa `npm install`; las dependencias transitivas no quedan fijadas entre ejecuciones. Generar el lockfile en un entorno con acceso al registro npm, revisarlo/comprometerlo y cambiar CI a `npm ci`.
+- **Lockfile corregido el 3 de noviembre de 2026:** `package-lock.json` quedó versionado en el PR (lockfile v3, 241 paquetes, dependencias directas alineadas con `package.json`). El workflow usa `npm ci --no-audit --no-fund` y la caché de setup-node toma el lockfile. La ejecución #485 confirmó que `npm ci`, auditoría de dependencias, pruebas y build web pasan. La ejecución #486 valida el workflow simplificado desde el lockfile ya comprometido.
 - CSP todavía no está aplicada. El Worker inyecta scripts/estilos inline y la app genera documentos de impresión con scripts inline; activar CSP sin migrar esos comportamientos puede romper registro, recuperación, tarjetas, cotizaciones o impresión. Primero moverlos/protegerlos con nonces y probar cada flujo, luego aplicar una política CSP restrictiva.
 
 ### P2 — Alcance funcional posterior
@@ -114,7 +114,7 @@ Estas capacidades no están terminadas y no deben presentarse como contabilidad 
 - [ ] MFA de Cloudflare, GitHub y Supabase verificado.
 - [ ] Protección de rama `main` y check `build` obligatorios.
 - [ ] SQL posdespliegue de caja ejecutado tras pruebas.
-- [ ] `package-lock.json` comprometido y CI migrado a `npm ci`.
+- [x] `package-lock.json` comprometido y CI migrado a `npm ci` (#485 aprobó la instalación y los tests; #486 verifica el workflow simplificado).
 - [ ] CSP aplicada tras proteger los scripts de la app y de impresión.
 - [ ] Conciliación bancaria, devoluciones y contabilidad formal diseñadas/implementadas.
 
