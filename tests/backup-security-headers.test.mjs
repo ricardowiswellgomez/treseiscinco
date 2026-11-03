@@ -32,4 +32,8 @@ test("Worker sets baseline browser security response headers", () => {
   assert.ok(worker.includes('return secureResponse(new Response(apk.body'));
   assert.ok(worker.includes('return secureResponse(new Response(mp3'));
   assert.ok(worker.includes('return secureResponse(new Response("<!doctype html'));
+  const signupStart = worker.indexOf("async function protectedSignup");
+  const signupEnd = worker.indexOf("export default", signupStart);
+  assert.ok(signupStart >= 0 && signupEnd > signupStart);
+  assert.ok(worker.slice(signupStart, signupEnd).includes("headers:applySecurityHeaders(responseHeaders)"), "successful signup proxy response must also carry security headers");
 });
