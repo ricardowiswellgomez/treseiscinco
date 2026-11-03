@@ -38,6 +38,7 @@ test("server close calculation includes cash sales, supplier payments and expens
   assert.match(serverMigration, /ON public\.purchase_payments \(business_id, created_by, created_at\)/);
   assert.match(serverMigration, /ALTER TABLE public\.expenses[\s\S]*ALTER COLUMN created_by SET DEFAULT auth\.uid\(\)/);
   assert.match(serverMigration, /CREATE OR REPLACE FUNCTION private\.set_expense_created_by\(\)/);
+  assert.match(serverMigration, /GRANT INSERT ON public\.expenses TO authenticated/);
   assert.match(serverMigration, /BEFORE INSERT OR UPDATE OF created_by ON public\.expenses/);
   assert.match(serverMigration, /created_by = auth\.uid\(\)[\s\S]*private\.can_access_business\(business_id, 'expenses_manage'\)/);
   assert.equal((serverMigration.match(/SET search_path TO ''/g) || []).length, 3);
