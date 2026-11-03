@@ -16,19 +16,20 @@ Se aplicaron cinco migraciones de endurecimiento en producción (privacidad del 
 
 - PR #80 permanece abierto y en borrador.
 - GitHub Actions **#526 falló** porque `tests/database-indexes.test.mjs` todavía leía el nombre anterior de la migración de índices. Se actualizó la prueba al nombre real de producción.
-- GitHub Actions **#532 terminó en `success`** y pasó build, pruebas, verificación Android, APK e icono; era anterior a la sincronización exacta de la versión de la nueva migración de compatibilidad.
+- GitHub Actions **#532 terminó en `success`** en una revisión previa; aún precedía la sincronización final de la migración de compatibilidad.
 - GitHub Actions **#535 terminó en `success`** sobre el HEAD actual `fd9f3ed60a486cfc22dc4f63e2ec39bb014a0467`: `npm ci`, auditoría de dependencias de alta severidad, sintaxis del Worker, **97 pruebas (97 aprobadas, 0 fallidas)**, build web, verificación de ruta Android, generación del APK, icono oficial y carga de activos estáticos.
 - En #535, el job `Deploy production Worker` quedó `skipped`, correctamente por tratarse de un pull request. No se publicó el Worker: [ejecución #535](https://github.com/ricardowiswellgomez/treseiscinco/actions/runs/41689479974).
+- GitHub Actions **#536 terminó en `success`** sobre el HEAD documental `89d21535333e9e9031b16ec2ce3b056985d794c7`: volvió a pasar `npm ci`, auditoría al umbral alto, sintaxis del Worker, 97 pruebas (97/97), build web, APK, icono y activos. El job de despliegue volvió a quedar `skipped`: [ejecución #536](https://github.com/ricardowiswellgomez/treseiscinco/actions/runs/41690044472). Este commit solo cambió `docs/GO_LIVE_AUDIT.md`; no cambió el código.
 - Artefacto `treseiscinco-dist`: 4.693.594 bytes; SHA-256 `8329920725ab810e9de2d3b013fbbff93a1b49b05bfc84bcb126c51167fc5865`. Es temporal, expira el 4 de noviembre de 2026 y no se publicó en producción.
 - `main` permanece en `a4c67b1d3f48b1eff59bdea729112f843bc7e459`.
 
 ### Supabase — base de datos
 
 - El proyecto está en estado `ACTIVE_HEALTHY`, PostgreSQL 17.
-- Historial remoto: **100 migraciones**. Las seis últimas son las correcciones de privacidad, `search_path`, índices, caja, limpieza del índice duplicado y compatibilidad de la interfaz antigua; la última es `20261103175507 guard_cash_register_session_direct_writes`.
+- Historial remoto: **100 migraciones**; el repositorio contiene **54 archivos SQL** en `supabase/migrations`. Las seis últimas versiones remotas son las correcciones de privacidad, `search_path`, índices, caja, limpieza del índice duplicado y compatibilidad de la interfaz antigua; la última es `20261103175507 guard_cash_register_session_direct_writes`.
 - El repositorio no contiene una copia íntegra y ordenada de todo el historial remoto. Se alinearon los cinco archivos de endurecimiento con las versiones reales que Supabase registró, pero todavía quedan migraciones históricas ausentes o con nombres/versiones distintos. Esto impide declarar reproducible una reconstrucción completa desde cero.
 - **No ejecutar `supabase db push`, ni insertar/eliminar filas de `supabase_migrations.schema_migrations` manualmente.** No se debe marcar como aplicada una migración sin demostrar que su contenido ya está reflejado en el esquema.
-- La rama contiene cinco migraciones que ya constan en el historial remoto:
+- La rama contiene seis migraciones que ya constan en el historial remoto:
   - `20261103173103_redact_public_catalog_internal_fields.sql`
   - `20261103173342_harden_public_rpc_search_paths.sql`
   - `20261103173358_add_missing_foreign_key_indexes.sql`
@@ -46,7 +47,7 @@ Se aplicaron cinco migraciones de endurecimiento en producción (privacidad del 
 ### Cloudflare — zona y Worker
 
 - La zona `treseiscinco.com` está activa; los dominios raíz y `www` están vinculados al Worker `treseiscinco`.
-- El Worker `treseiscinco` sigue sirviendo la versión **187**, desplegada el 30 de octubre de 2026. El build de PR #528/#529 no desplegó el Worker; la nueva interfaz todavía no está publicada.
+- El último despliegue de producción que devuelve Cloudflare es del **30 de octubre de 2026 a las 08:09:06 UTC**, con la versión `e94a2d48-a740-420e-b5cf-b944cd3bbc61` al 100 %. La API lista 187 despliegues históricos; no debe confundirse ese contador con el número de versión activa. Los builds #535/#536 no desplegaron el Worker; la nueva interfaz todavía no está publicada.
 - HTTPS forzado está activo; versión mínima TLS 1.2 y TLS 1.3 está habilitado.
 - HSTS está activo en la zona. La política de zona tiene `max_age=15552000`, `include_subdomains=false`; el Worker devuelve además `Strict-Transport-Security: max-age=31536000`.
 - El ajuste antiguo `waf` devuelve el error 1027 de Cloudflare: está obsoleto y debe usarse Rulesets. No volver a intentar activarlo.
@@ -96,7 +97,7 @@ Documentación:
 
 ### P1 — Cadena de suministro y CSP
 
-- **Lockfile corregido el 3 de noviembre de 2026:** `package-lock.json` quedó versionado en el PR (lockfile v3, 241 paquetes, dependencias directas alineadas con `package.json`). El workflow usa `npm ci --no-audit --no-fund` y la caché de setup-node toma el lockfile. La ejecución #485 confirmó que `npm ci`, auditoría de dependencias, pruebas, build web, APK e icono pasan. La ejecución #489 validó el workflow definitivo simplificado (lockfile comprometido, `npm ci`, auditoría, pruebas, build web, APK, icono y Wrangler dry-run) y terminó en `success`. La ejecución #486 fue bloqueada por GitHub porque la disparó el bot; no se considera una aprobación ni un fallo de código. Los cambios posteriores de este informe son exclusivamente documentales y no alteran el código compilado.
+- **Lockfile y CI:** `package-lock.json` (lockfile v3) está versionado y el workflow usa `npm ci --no-audit --no-fund`. Las ejecuciones #535 y #536 pasaron 97/97 pruebas y los builds web/Android. El paso `npm audit --audit-level=high` termina con éxito porque no encontró vulnerabilidades de severidad alta o crítica, pero muestra **6 vulnerabilidades moderadas**: avisos de `glob` (bypass de cancelación), `minimatch` (posible denegación de servicio) y `uuid` (comprobación de límites de buffer), propagados por dependencias como `rimraf`/`xcode`/`@capacitor/cli`. El log indica que corregir `uuid` con `--force` llevaría `@capacitor/cli` a 8.6.0 fuera del rango declarado; no se forzó esa actualización. Pendiente: revisar el árbol de dependencias y actualizar versiones compatibles, con CI completo después del cambio.
 - CSP todavía no está aplicada. El Worker inyecta scripts/estilos inline y la app genera documentos de impresión con scripts inline; activar CSP sin migrar esos comportamientos puede romper registro, recuperación, tarjetas, cotizaciones o impresión. Primero moverlos/protegerlos con nonces y probar cada flujo, luego aplicar una política CSP restrictiva.
 
 ### P2 — Alcance funcional posterior
@@ -142,7 +143,8 @@ Los movimientos históricos en efectivo que se registraron sin sesión no se asi
 
 ## Estado de salida
 
-- [x] CI #528 aprobó las correcciones de rutas de migración y las pruebas del código actual; solo se añadió después una actualización documental.
+- [x] CI #535 aprobó el HEAD de código sincronizado (`fd9f3ed`) con 97/97 pruebas, build web y APK.
+- [x] CI #536 aprobó el HEAD documental actual (`89d2153`), con 97/97 pruebas; despliegue omitido por tratarse de un PR.
 - [x] APK de prueba generada y validada.
 - [x] Reglas administradas gratuitas de Cloudflare desplegadas y verificadas por API.
 - [x] TLS/HTTPS/HSTS comprobados.
@@ -161,7 +163,8 @@ Los movimientos históricos en efectivo que se registraron sin sesión no se asi
 - [ ] Protección de rama `main` y check `build` obligatorios.
 - [ ] Secreto `CLOUDFLARE_API_TOKEN` creado en GitHub Actions para publicar el Worker al fusionar.
 - [ ] SQL posdespliegue de caja ejecutado tras pruebas.
-- [x] `package-lock.json` comprometido y CI migrado a `npm ci` (#485 aprobó la instalación y los tests; #486 verifica el workflow simplificado).
+- [x] `package-lock.json` comprometido y CI usa `npm ci`; #535 y #536 pasaron las 97 pruebas. La auditoría todavía reporta 6 vulnerabilidades moderadas, pendientes de remediación.
+- [ ] Resolver las 6 vulnerabilidades moderadas de dependencias con actualizaciones compatibles y pruebas completas.
 - [ ] CSP aplicada tras proteger los scripts de la app y de impresión.
 - [ ] Conciliación bancaria, devoluciones y contabilidad formal diseñadas/implementadas.
 
