@@ -29,6 +29,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
+      - name: Regenerate lockfile with compatible dependency overrides
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Audit dependencies for high-severity vulnerabilities
@@ -158,6 +160,13 @@ jobs:
           }
           NODE
           echo "APK label, actual PNG payloads verified; adaptive foreground artwork and adaptive XML verified."
+      - name: Upload refreshed npm lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-lockfile-recovery
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
       - name: Upload Worker static assets
         uses: actions/upload-artifact@v4
         with:
