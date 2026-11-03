@@ -1,4 +1,19 @@
 -- Add trusted server-side cash register operations.
+-- Supporting indexes for one-user cash sessions and cash-only close aggregation.
+CREATE INDEX IF NOT EXISTS cash_register_sessions_opened_by_idx
+  ON public.cash_register_sessions (opened_by);
+CREATE INDEX IF NOT EXISTS cash_register_sessions_closed_by_idx
+  ON public.cash_register_sessions (closed_by);
+CREATE INDEX IF NOT EXISTS sale_payments_cash_session_idx
+  ON public.sale_payments (business_id, created_by, paid_at)
+  WHERE payment_method = 'Efectivo';
+CREATE INDEX IF NOT EXISTS purchase_payments_cash_session_idx
+  ON public.purchase_payments (business_id, created_by, paid_at)
+  WHERE payment_method = 'Efectivo';
+CREATE INDEX IF NOT EXISTS expenses_cash_session_idx
+  ON public.expenses (business_id, created_by, created_at)
+  WHERE payment_method = 'Efectivo';
+
 -- Direct INSERT/UPDATE grants are revoked in a follow-up migration after the
 -- application has moved to these RPCs.
 
