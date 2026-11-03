@@ -5,7 +5,7 @@ CREATE OR REPLACE FUNCTION public.get_public_catalog(p_business_id uuid, p_limit
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
+ SET search_path TO ''
 AS $function$
 declare
   v_business jsonb;
