@@ -8494,11 +8494,11 @@ function AuthenticatedApp() {
               <div className="profitability-breakdowns">
                 <section className="profit-breakdown panel">
                   <div className="profit-breakdown-heading"><div><h3>Costos por artículo vendido</h3><p>Lo que costaron los artículos que ya vendiste.</p></div></div>
-                  {periodSaleItems.length ? <div className="profit-data-list">{Object.values(periodSaleItems.reduce((groups, item) => {
+                  {profitNetItemRows.length ? <div className="profit-data-list">{Object.values(profitNetItemRows.reduce((groups, item) => {
                     const name = item.item_name || "Artículo sin nombre";
                     if (!groups[name]) groups[name] = { name, quantity: 0, revenue: 0, cost: 0 };
                     groups[name].quantity += Number(item.quantity || 0);
-                    groups[name].revenue += Number(item.line_total_minor || 0);
+                    groups[name].revenue += Number(item.net_revenue_minor || 0);
                     groups[name].cost += Math.round(Number(item.unit_cost_minor || 0) * Number(item.quantity || 0));
                     return groups;
                   }, {})).sort((a, b) => (b.revenue - b.cost) - (a.revenue - a.cost)).slice(0, 12).map((item) => <div className="profit-data-row" key={item.name}>
