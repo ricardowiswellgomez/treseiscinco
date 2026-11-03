@@ -46,6 +46,8 @@ BEFORE INSERT OR UPDATE OF created_by ON public.expenses
 FOR EACH ROW EXECUTE FUNCTION private.set_expense_created_by();
 
 DROP POLICY IF EXISTS expenses_insert_by_permission ON public.expenses;
+GRANT INSERT ON public.expenses TO authenticated;
+
 CREATE POLICY expenses_insert_by_permission
 ON public.expenses FOR INSERT TO authenticated
 WITH CHECK (
