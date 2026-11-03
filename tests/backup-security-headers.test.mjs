@@ -37,3 +37,18 @@ test("Worker sets baseline browser security response headers", () => {
   assert.ok(signupStart >= 0 && signupEnd > signupStart);
   assert.ok(worker.slice(signupStart, signupEnd).includes("headers:applySecurityHeaders(responseHeaders)"), "successful signup proxy response must also carry security headers");
 });
+
+test("Worker enforces CSP without allowing inline scripts and serves startup scripts as same-origin assets", () => {
+  assert.ok(worker.includes('"Content-Security-Policy"'));
+  assert.ok(worker.includes('"script-src \'self\' https://challenges.cloudflare.com"'));
+  assert.ok(worker.includes('"script-src-attr \'none\'"'));
+  for (const route of ["/_t365/live-enhancements.js","/_t365/boot-recovery.js","/_t365/signup-security.js"]) {
+    assert.ok(worker.includes(route), "missing external startup script route " + route);
+  }
+});
+
+test("Print documents do not inject inline scripts; parent app owns the print action", () => {
+  assert.ok(!app.includes("<script>window.addEventListener"));
+  assert.ok(app.includes("printWindow.addEventListener(\"load\""));
+  assert.ok(app.includes("win.addEventListener(\"load\""));
+});
