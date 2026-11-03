@@ -16,8 +16,8 @@ No se aplicaron las migraciones del PR a producción ni se revocaron escrituras 
 
 - PR #80 permanece abierto y en borrador.
 - HEAD probado: `62b715ca12147d1cfd2c1cc941b3f4182a0cc37a`.
-- GitHub Actions, ejecución **#482**, terminó en `success`: auditoría de dependencias de alta severidad, sintaxis del Worker, pruebas, build web, verificación de la ruta APK, APK instalable, icono de marca y dry-run de Wrangler.
-- El artefacto `treseiscinco-apk` se generó correctamente (4.281.536 bytes; SHA-256 `320cf31b6897fb01c1d9f5e52f0ac5d85e38bb87018331d6489c8fd4c2b0c02c`). Es un artefacto de prueba; no se publicó como APK de producción.
+- GitHub Actions, ejecución **#489**, terminó en `success`: auditoría de dependencias de alta severidad, sintaxis del Worker, pruebas, build web, verificación de la ruta APK, APK instalable, icono de marca y dry-run de Wrangler.
+- El artefacto `treseiscinco-apk` se generó correctamente (4.281.532 bytes; SHA-256 `48a5d2efd6412fde264565dc31f58532a2f6354b1cdcd4c5f550cf0a90d447af`). Es un artefacto de prueba; no se publicó como APK de producción.
 - El despliegue del Worker y la publicación del APK se omitieron correctamente porque el evento fue un pull request.
 - `main` permanece en `a4c67b1d3f48b1eff59bdea729112f843bc7e459`.
 
@@ -101,6 +101,21 @@ Estas capacidades no están terminadas y no deben presentarse como contabilidad 
 - Devoluciones/anulaciones enlazadas a la venta original y registradas como movimientos monetarios; no como gastos genéricos.
 - Contabilidad formal: plan de cuentas, asientos, libro diario, balance y reportes tributarios. Definir primero el alcance legal/contable colombiano y los perfiles de contador antes de implementar.
 
+## Hallazgo adicional confirmado en producción — 3 de noviembre de 2026
+
+La lectura directa de la definición de `public.get_public_catalog(uuid,integer,integer,text,uuid,text)` en la base activa confirmó que la versión desplegada devuelve datos internos que no deberían formar parte del catálogo público:
+
+- `sku` de productos y variantes.
+- `stock_on_hand` exacto de productos y variantes.
+- `track_inventory`, `is_active` de variantes y metadatos tributarios (`tax_code`).
+- Otros campos internos incluidos en el JSON de respuesta de productos.
+
+La función es `SECURITY DEFINER` y ejecutable por `anon`. Por tanto, estos campos pueden consultarse sin iniciar sesión cuando se conoce el identificador del negocio. La migración `20261102000300_redact_public_catalog_internal_fields.sql` del PR reemplaza la función para retirar esos campos, pero **no está aplicada en producción ni ha sido probada en un entorno aislado**.
+
+**Prioridad P0 — privacidad del catálogo:** no fusionar ni desplegar a producción hasta probar esa migración y verificar con una consulta anónima que la respuesta no contiene `sku`, `stock_on_hand`, `track_inventory`, `tax_code` ni datos equivalentes de variantes. No modificar la función directamente en producción durante esta auditoría.
+
+También se confirmó que las seis funciones `SECURITY DEFINER` accesibles por `anon` tienen actualmente `search_path=public, pg_temp`. La migración `20261102000500_harden_public_rpc_search_paths.sql` busca endurecer esa configuración; sigue pendiente de ensayo.
+
 ## Estado de salida
 
 - [x] CI del commit actual del PR aprobado.
@@ -108,7 +123,7 @@ Estas capacidades no están terminadas y no deben presentarse como contabilidad 
 - [x] Reglas administradas gratuitas de Cloudflare desplegadas y verificadas por API.
 - [x] TLS/HTTPS/HSTS comprobados.
 - [x] Privilegios directos sobre las cuatro tablas de métricas comprobados.
-- [ ] Historial de migraciones reconciliado y reproducible.
+- [ ] Historial de migraciones reconciliado y reproducible.\n- [ ] Corregir y verificar en ensayo la exposición de SKU, existencias exactas y metadatos internos del RPC público de catálogo.
 - [ ] Migraciones probadas en rama/entorno de desarrollo.
 - [ ] Pruebas transaccionales y de aislamiento multiempresa aprobadas.
 - [ ] CAPTCHA nativo y protección de contraseñas filtradas activados en Supabase Auth.
