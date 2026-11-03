@@ -25,10 +25,9 @@ test("temporary email providers are rejected at the server boundary", () => {
   assert.match(migration, /BEFORE INSERT OR UPDATE OF email ON auth\.users/);
 });
 
-test("the frontend intercepts the Auth signup request and requires a token", () => {
-  assert.match(worker, /treseiscinco-signup-security/);
-  assert.match(worker, /x-turnstile-token/);
-  assert.ok(worker.includes("gotrue_meta_security:{captcha_token:captchaToken}"));
-  assert.ok(worker.includes("window.__t365AuthCaptchaToken"));
+test("the frontend auth security bootstrap is served as a same-origin script", () => {
+  assert.ok(worker.includes("const signupSecurityScript="));
+  assert.ok(worker.includes("/_t365/signup-security.js"));
+  assert.ok(worker.includes('signupSecurityScript.replace("__TURNSTILE_SITEKEY__",TURNSTILE_SITEKEY)'));
   assert.match(app, /minLength=\{mode === "signup" \? 12 : 6\}/);
 });
