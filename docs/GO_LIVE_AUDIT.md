@@ -163,7 +163,7 @@ Los movimientos históricos en efectivo que se registraron sin sesión no se asi
 - [ ] Protección de rama `main` y check `build` obligatorios.
 - [ ] Secreto `CLOUDFLARE_API_TOKEN` creado en GitHub Actions para publicar el Worker al fusionar.
 - [ ] SQL posdespliegue de caja ejecutado tras pruebas.
-- [x] `package-lock.json` comprometido y CI usa `npm ci`; #535 y #536 pasaron las 97 pruebas. La auditoría todavía reporta 6 vulnerabilidades moderadas, pendientes de remediación.
+- [x] CI #544 ejecutó `npm audit --audit-level=low` y encontró 0 vulnerabilidades; 99/99 pruebas aprobadas. El lockfile nuevo se publica como artefacto temporal y aún debe incorporarse al repositorio.
 - [x] Dependencias actualizadas; CI #544 encontró 0 vulnerabilidades con umbral `low`.
 - [x] CSP aplicada en el código del PR y validada por CI #543; aún no está en producción.
 - [ ] Incorporar el `package-lock.json` generado en CI #544 al repositorio.
