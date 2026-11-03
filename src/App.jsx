@@ -1588,7 +1588,7 @@ function PublicCatalog({ businessId }) {
           <button type="button" className="secondary-button" onClick={refreshReturnedOrder} disabled={orderStatusLoading}>{orderStatusLoading ? "Consultando…" : "Actualizar estado"}</button>
         </div>}
         <div className="public-catalog-filters" aria-label="Buscar y ordenar productos">
-          <label className="public-catalog-search"><span><AppIcon name="search" size={16}/> Buscar productos</span><input value={catalogSearchText} onChange={(event) => { setCatalogSearchText(event.target.value); setPage(0); }} maxLength={100} placeholder="Nombre, descripción o código…" /></label>
+          <label className="public-catalog-search"><span><AppIcon name="search" size={16}/> Buscar productos</span><input value={catalogSearchText} onChange={(event) => { setCatalogSearchText(event.target.value); setPage(0); }} maxLength={100} placeholder="Nombre o descripción…" /></label>
           <label><span>Categoría</span><select value={catalogCategoryFilter} onChange={(event) => { setCatalogCategoryFilter(event.target.value); setPage(0); }}><option value="all">Todas las categorías</option>{catalogCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
           <label><span>Ordenar por</span><select value={catalogPublicSort} onChange={(event) => { setCatalogPublicSort(event.target.value); setPage(0); }}><option value="name_asc">Nombre: A → Z</option><option value="name_desc">Nombre: Z → A</option><option value="price_asc">Precio: menor a mayor</option><option value="price_desc">Precio: mayor a menor</option></select></label>
         </div>
