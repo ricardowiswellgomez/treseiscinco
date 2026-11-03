@@ -22,11 +22,14 @@ test("public catalog JSON does not disclose internal inventory quantities, SKU o
   assert.ok(migration.includes("SET search_path TO ''"), "SECURITY DEFINER catalog function must use an empty search path");
 });
 
-test("exposed SECURITY DEFINER RPCs use a fixed path with pg_temp last or an empty path", () => {
+test("exposed SECURITY DEFINER RPCs preserve trusted paths and put pg_temp last or use an empty path", () => {
   assert.ok(pathMigration.includes("p.prosecdef"));
   assert.ok(pathMigration.includes("has_function_privilege('anon', p.oid, 'EXECUTE')"));
   assert.ok(pathMigration.includes("has_function_privilege('authenticated', p.oid, 'EXECUTE')"));
-  assert.ok(pathMigration.includes("SET search_path TO pg_catalog, public, private, auth, extensions, pg_temp"));
+  assert.ok(pathMigration.includes("v_path text"));
+  assert.ok(pathMigration.includes("cfg.setting LIKE 'search_path=%'"));
+  assert.ok(pathMigration.includes("!~ '(^|,)\\\\s*pg_temp\\\\s*$'"));
+  assert.ok(pathMigration.includes("ALTER FUNCTION %s SET search_path TO %s, pg_temp"));
   assert.ok(pathMigration.includes("search_path=" + String.fromCharCode(34, 34)));
   for (const signature of [
     "get_public_catalog_image(uuid, uuid, text)",
