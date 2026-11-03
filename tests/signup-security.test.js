@@ -27,7 +27,9 @@ test("temporary email providers are rejected at the server boundary", () => {
 
 test("the frontend intercepts the Auth signup request and requires a token", () => {
   assert.match(worker, /treseiscinco-signup-security/);
-  assert.match(worker, /x-turnstile-token/);\n  assert.match(worker, /gotrue_meta_security:\\{captcha_token:captchaToken\\}/);
+  assert.match(worker, /x-turnstile-token/);
+  assert.match(worker, /gotrue_meta_security:\\{captcha_token:captchaToken\\}/);
+  assert.match(worker, /window\\.__t365AuthCaptchaToken/);
   assert.match(worker, /window\.__t365AuthCaptchaToken/);
   assert.match(app, /minLength=\{mode === "signup" \? 12 : 6\}/);
 });
