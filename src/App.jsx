@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase, supabasePublishableKey } from "./lib/supabase.js";
-import { getSaleNetRevenueMinor, getSaleCostMinor, isSaleIncludedInProfitability } from "./lib/financial-calculations.js";
+import { getSaleNetRevenueMinor, getSaleNetItemRevenueRows, getSaleCostMinor, isSaleIncludedInProfitability } from "./lib/financial-calculations.js";
 import { applyAppLanguage } from "./i18n.js";
 import { getSidebarItemLabel } from "./lib/sidebar-menu.js";
 
@@ -7384,7 +7384,16 @@ function AuthenticatedApp() {
   const profitSalesTotal = periodSales.reduce((sum, sale) => sum + Number(sale.total_minor || 0), 0);
   const profitPaidTotal = periodSales.reduce((sum, sale) => sum + Number(sale.amount_paid_minor || 0), 0);
   const profitCostOfSales = periodSaleItems.reduce((sum, item) => sum + Math.round(Number(item.unit_cost_minor || 0) * Number(item.quantity || 0)), 0);
-  const profitLineRevenue = periodSaleItems.reduce((sum, item) => sum + Number(item.line_total_minor || 0), 0);
+  const profitabilityItemsBySale = periodSaleItems.reduce((groups, item) => {
+    if (!groups.has(item.sale_id)) groups.set(item.sale_id, []);
+    groups.get(item.sale_id).push(item);
+    return groups;
+  }, new Map());
+  const profitNetItemRows = periodSales.flatMap((sale) =>
+    getSaleNetItemRevenueRows(sale, profitabilityItemsBySale.get(sale.id) || [])
+      .map(({ item, revenue_minor }) => ({ ...item, net_revenue_minor: revenue_minor }))
+  );
+  const profitLineRevenue = profitNetItemRows.reduce((sum, item) => sum + item.net_revenue_minor, 0);
   const profitGross = profitLineRevenue - profitCostOfSales;
   const profitExpenseTotal = periodExpenses.reduce((sum, expense) => sum + Number(expense.amount_minor || 0), 0);
   const profitNet = profitGross - profitExpenseTotal;
@@ -7395,11 +7404,11 @@ function AuthenticatedApp() {
     groups[category].count += 1;
     return groups;
   }, {})).sort((a, b) => b.amount - a.amount);
-  const profitByItem = Object.values(periodSaleItems.reduce((groups, item) => {
+  const profitByItem = Object.values(profitNetItemRows.reduce((groups, item) => {
     const name = item.item_name || "Artículo sin nombre";
     if (!groups[name]) groups[name] = { name, quantity: 0, revenue: 0, cost: 0 };
     groups[name].quantity += Number(item.quantity || 0);
-    groups[name].revenue += Number(item.line_total_minor || 0);
+    groups[name].revenue += Number(item.net_revenue_minor || 0);
     groups[name].cost += Math.round(Number(item.unit_cost_minor || 0) * Number(item.quantity || 0));
     return groups;
   }, {})).sort((a, b) => (b.revenue - b.cost) - (a.revenue - a.cost));
