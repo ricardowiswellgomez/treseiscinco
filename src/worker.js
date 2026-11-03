@@ -69,22 +69,14 @@ const domain=email.slice(email.lastIndexOf("@")+1).replace(/\.$/,"");
 if([...DISPOSABLE_SIGNUP_DOMAINS].some(d=>domain===d||domain.endsWith("."+d)))return send({msg:"Ese dominio de correo es temporal. Usa un correo permanente al que tengas acceso para crear tu cuenta."},400);
 const apiKey=req.headers.get("apikey")||"";
 if(apiKey!==PUBLISHABLE_KEY)return send({msg:"No se pudo validar la solicitud de registro."},403);
-if(!env.SIGNUP_LIMITER||!env.TURNSTILE_SECRET)return send({msg:"El registro no está disponible temporalmente. Inténtalo de nuevo más tarde."},503);
+if(!env.SIGNUP_LIMITER)return send({msg:"El registro no está disponible temporalmente. Inténtalo de nuevo más tarde."},503);
 const ip=req.headers.get("CF-Connecting-IP")||"unknown";
 let rate;
 try{rate=await env.SIGNUP_LIMITER.limit({key:"treseiscinco-signup:"+ip})}catch{return send({msg:"El registro no está disponible temporalmente. Inténtalo más tarde."},503)}
 if(!rate.success)return send({msg:"Has intentado crear varias cuentas seguidas. Espera un minuto e inténtalo de nuevo."},429);
 const captchaToken=String(req.headers.get("x-turnstile-token")||"");
 if(!captchaToken||captchaToken.length>2048)return send({msg:"Completa la verificación de seguridad para crear tu cuenta."},403);
-let verification;
-try{
-const verifyBody=new URLSearchParams({secret:env.TURNSTILE_SECRET,response:captchaToken,remoteip:ip});
-const vr=await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:verifyBody.toString(),redirect:"error"});
-if(!vr.ok)return send({msg:"No pudimos validar la verificación. Inténtalo de nuevo."},403);
-verification=await vr.json();
-}catch{return send({msg:"No pudimos validar la verificación. Inténtalo de nuevo."},403)}
-const hostname=String(verification?.hostname||"").toLowerCase();
-if(!verification?.success||verification?.action!=="signup"||!ALLOWED_SIGNUP_HOSTS.has(hostname))return send({msg:"La verificación de seguridad venció o no es válida. Complétala de nuevo."},403);
+// Supabase Auth verifies this single-use token using its native CAPTCHA setting.
 // Pass the verified token in Supabase Auth's native CAPTCHA field as well.
 const signupBody=JSON.stringify({...data,gotrue_meta_security:{captcha_token:captchaToken}});
 const headers=new Headers();
