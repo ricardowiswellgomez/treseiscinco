@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const serverMigration = await readFile(new URL("../supabase/migrations/20261103173636_add_server_cash_register_rpcs.sql", import.meta.url), "utf8");
-const legacyGuardMigration = await readFile(new URL("../supabase/migrations/20261103175500_guard_cash_register_session_direct_writes.sql", import.meta.url), "utf8");
+const legacyGuardMigration = await readFile(new URL("../supabase/migrations/20261103175507_guard_cash_register_session_direct_writes.sql", import.meta.url), "utf8");
 const lockdownMigration = await readFile(new URL("../supabase/post-deploy/20261102000400_restrict_cash_register_direct_writes.sql", import.meta.url), "utf8");
 const dedupeMigration = await readFile(new URL("../supabase/migrations/20261103173747_deduplicate_cash_register_open_index.sql", import.meta.url), "utf8");
 
