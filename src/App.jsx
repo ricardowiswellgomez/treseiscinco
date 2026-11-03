@@ -4003,7 +4003,8 @@ function AuthenticatedApp() {
       const svg = buildBusinessCardSvg(profile, businessName, logoDataUri);
       // Render the vector artwork inline in the print document. This preserves the chosen
       // background rectangle and explicit text fills in Chrome/Edge's print pipeline.
-      const html = '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tarjeta · ' + escapeHtml(businessName) + '</title><style>*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;forced-color-adjust:none!important;box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;font-family:Arial,sans-serif}body{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px}.card-svg{display:block;width:90mm;height:50mm;max-width:100%;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.card-svg svg{display:block;width:90mm;height:50mm;max-width:100%;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.print-hint{font-size:12px;color:#555;text-align:center;padding:0 12px}@media print{@page{size:90mm 50mm;margin:0}body{min-height:0;display:block}.card-svg,.card-svg svg{width:90mm;height:50mm;max-width:none}.print-hint{display:none}}</style></head><body><div class="card-svg" aria-label="Tarjeta comercial con colores personalizados">' + svg + '</div><p class="print-hint">Elige «Guardar como PDF» para conservar el formato de 9 × 5 cm. El fondo y los textos usan los colores seleccionados.</p><script>window.addEventListener("load",()=>setTimeout(()=>window.print(),350));</script></body></html>';
+      const html = '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tarjeta · ' + escapeHtml(businessName) + '</title><style>*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;forced-color-adjust:none!important;box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;font-family:Arial,sans-serif}body{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px}.card-svg{display:block;width:90mm;height:50mm;max-width:100%;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.card-svg svg{display:block;width:90mm;height:50mm;max-width:100%;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.print-hint{font-size:12px;color:#555;text-align:center;padding:0 12px}@media print{@page{size:90mm 50mm;margin:0}body{min-height:0;display:block}.card-svg,.card-svg svg{width:90mm;height:50mm;max-width:none}.print-hint{display:none}}</style></head><body><div class="card-svg" aria-label="Tarjeta comercial con colores personalizados">' + svg + '</div><p class="print-hint">Elige «Guardar como PDF» para conservar el formato de 9 × 5 cm. El fondo y los textos usan los colores seleccionados.</p></body></html>';
+      printWindow.addEventListener("load", () => setTimeout(() => { printWindow.focus(); printWindow.print(); }, 350), { once: true });
       printWindow.document.open();
       printWindow.document.write(html);
       printWindow.document.close();
@@ -6408,10 +6409,11 @@ function AuthenticatedApp() {
       <table><thead><tr><th>Artículo / servicio</th><th class="num">Cantidad</th><th class="num">Precio unitario</th><th class="num">Total</th></tr></thead><tbody>${items}</tbody></table>
       <div class="summary">${summaryRows}</div>
       ${quote.notes ? "<div class=\"notes\"><strong>Notas y condiciones</strong><p>" + escapeHtml(quote.notes) + "</p></div>" : ""}<div class="footer">Cotización comercial generada desde treseiscinco · ${escapeHtml(brand)}. Este documento es una propuesta comercial, no una factura ni comprobante de pago.</div>
-      <script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print()},350)})<\\/script></body></html>`;
+      <\\/script></body></html>`;
     const win = window.open(window.location.href, "_blank", "width=900,height=900");
     if (!win) { setError("Permite las ventanas emergentes para abrir la cotización e imprimirla o guardarla como PDF."); return; }
     try { win.opener = null; } catch { /* La impresión no depende de window.opener. */ }
+    win.addEventListener("load", () => setTimeout(() => { win.focus(); win.print(); }, 350), { once: true });
     win.document.open(); win.document.write(html); win.document.close();
   }
 
@@ -6639,10 +6641,11 @@ function AuthenticatedApp() {
       <div class="summary"><div><span>Total</span><strong>${escapeHtml(money(total, sale.currency_code || currencyCode))}</strong></div><div><span>Pagado</span><strong>${escapeHtml(money(paid, sale.currency_code || currencyCode))}</strong></div><div class="balance"><span>Saldo pendiente</span><strong>${escapeHtml(money(outstanding, sale.currency_code || currencyCode))}</strong></div></div>
       ${paymentRows ? "<h3>Historial de pagos</h3><table><thead><tr><th>Fecha</th><th>Medio de pago</th><th class=\"num\">Importe</th></tr></thead><tbody>" + paymentRows + "</tbody></table>" : ""}
       ${sale.notes ? "<p style=\"margin-top:24px\"><strong>Notas:</strong> " + escapeHtml(sale.notes) + "</p>" : ""}<div class="footer">Documento comercial generado desde treseiscinco · ${escapeHtml(brand)}</div>
-      <script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print()},350)})<\/script></body></html>`;
+      <\/script></body></html>`;
     const win = window.open(window.location.href, "_blank", "width=900,height=900");
     if (!win) { setError("Permite las ventanas emergentes para abrir el documento e imprimirlo o guardarlo como PDF."); return; }
     try { win.opener = null; } catch { /* La impresión no depende de window.opener. */ }
+    win.addEventListener("load", () => setTimeout(() => { win.focus(); win.print(); }, 350), { once: true });
     win.document.open(); win.document.write(html); win.document.close();
   }
 
