@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase, supabasePublishableKey } from "./lib/supabase.js";
+import { getSaleNetRevenueMinor, getSaleNetItemRevenueRows, getSaleCostMinor, isSaleIncludedInProfitability } from "./lib/financial-calculations.js";
 import { applyAppLanguage } from "./i18n.js";
 import { getSidebarItemLabel } from "./lib/sidebar-menu.js";
 
@@ -116,24 +117,78 @@ function buildHomeTrendData(period,range,sales,purchases,expenses) {
   return [...rows.values()];
 }
 function buildProfitabilityTrendData(sales,saleItems,expenses,period) {
-  const rowsByDate=new Map(),itemTotals=new Map();
-  for(const item of saleItems||[]){const value=itemTotals.get(item.sale_id)||{revenue:0,cost:0};value.revenue+=Number(item.line_total_minor)||0;value.cost+=Math.round((Number(item.unit_cost_minor)||0)*(Number(item.quantity)||0));itemTotals.set(item.sale_id,value);}
-  const records=[...(sales||[]).map((sale)=>({type:"sale",date:getDateKeyInBogota(sale.sold_at||sale.created_at),sale})),...(expenses||[]).map((expense)=>({type:"expense",date:getDateKeyInBogota(expense.expense_date),expense}))];
-  if(!records.length)return [];
-  const dates=records.map((record)=>record.date).sort(),minDate=new Date(dates[0]+"T12:00:00Z"),maxDate=new Date(dates[dates.length-1]+"T12:00:00Z");
-  const spanDays=Math.max(1,Math.round((maxDate-minDate)/86400000)+1),monthly=period==="all"||period==="year"||spanDays>62,hourly=period==="day",keys=[];
-  if(hourly){for(let hour=0;hour<24;hour++)keys.push("h:"+String(hour).padStart(2,"0"));}
-  else if(monthly){const cursor=new Date(Date.UTC(minDate.getUTCFullYear(),minDate.getUTCMonth(),1)),end=new Date(Date.UTC(maxDate.getUTCFullYear(),maxDate.getUTCMonth()+1,1));while(cursor<end&&keys.length<600){keys.push(cursor.getUTCFullYear()+"-"+String(cursor.getUTCMonth()+1).padStart(2,"0"));cursor.setUTCMonth(cursor.getUTCMonth()+1);}}
-  else{let date=dates[0],safe=0;while(date<=dates[dates.length-1]&&safe++<400){keys.push(date);date=shiftHomeDateKey(date,1);}}
-  const labelFor=(key)=>key.startsWith("h:")?key.slice(2)+":00":/^\d{4}-\d{2}$/.test(key)?new Date(key+"-01T12:00:00Z").toLocaleDateString("es-CO",{timeZone:"America/Bogota",month:"short"}):new Date(key+"T12:00:00Z").toLocaleDateString("es-CO",{timeZone:"America/Bogota",day:"2-digit",weekday:keys.length<=10?"short":undefined});
-  const bucketKey=(date,stamp,expense=false)=>hourly?"h:"+String(expense?12:getHourInBogota(stamp)).padStart(2,"0"):monthly?date.slice(0,7):date;
-  for(const key of keys)rowsByDate.set(key,{key,label:labelFor(key),revenue:0,cost:0,expenses:0,result:0});
-  for(const sale of sales||[]){const date=getDateKeyInBogota(sale.sold_at||sale.created_at),bucket=rowsByDate.get(bucketKey(date,sale.sold_at||sale.created_at));if(!bucket)continue;const totals=itemTotals.get(sale.id);if(totals){bucket.revenue+=totals.revenue;bucket.cost+=totals.cost;}else bucket.revenue+=Number(sale.total_minor)||0;}
-  for(const expense of expenses||[]){const date=getDateKeyInBogota(expense.expense_date),bucket=rowsByDate.get(bucketKey(date,expense.expense_date,true));if(bucket)bucket.expenses+=Number(expense.amount_minor)||0;}
-  for(const row of rowsByDate.values())row.result=row.revenue-row.cost-row.expenses;
+  const rowsByDate = new Map();
+  const itemsBySale = new Map();
+  for (const item of saleItems || []) {
+    const value = itemsBySale.get(item.sale_id) || { items: [], cost: 0 };
+    value.items.push(item);
+    value.cost += getSaleCostMinor([item]);
+    itemsBySale.set(item.sale_id, value);
+  }
+
+  const validSales = (sales || []).filter(isSaleIncludedInProfitability);
+  const records = [
+    ...validSales.map((sale) => ({ type: "sale", date: getDateKeyInBogota(sale.sold_at || sale.created_at), sale })),
+    ...(expenses || []).map((expense) => ({ type: "expense", date: getDateKeyInBogota(expense.expense_date), expense }))
+  ];
+  if (!records.length) return [];
+
+  const dates = records.map((record) => record.date).sort();
+  const minDate = new Date(dates[0] + "T12:00:00Z");
+  const maxDate = new Date(dates[dates.length - 1] + "T12:00:00Z");
+  const spanDays = Math.max(1, Math.round((maxDate - minDate) / 86400000) + 1);
+  const monthly = period === "all" || period === "year" || spanDays > 62;
+  const hourly = period === "day";
+  const keys = [];
+
+  if (hourly) {
+    for (let hour = 0; hour < 24; hour++) keys.push("h:" + String(hour).padStart(2, "0"));
+  } else if (monthly) {
+    const cursor = new Date(Date.UTC(minDate.getUTCFullYear(), minDate.getUTCMonth(), 1));
+    const end = new Date(Date.UTC(maxDate.getUTCFullYear(), maxDate.getUTCMonth() + 1, 1));
+    while (cursor < end && keys.length < 600) {
+      keys.push(cursor.getUTCFullYear() + "-" + String(cursor.getUTCMonth() + 1).padStart(2, "0"));
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    }
+  } else {
+    let date = dates[0];
+    let safe = 0;
+    while (date <= dates[dates.length - 1] && safe++ < 400) {
+      keys.push(date);
+      date = shiftHomeDateKey(date, 1);
+    }
+  }
+
+  const labelFor = (key) => key.startsWith("h:")
+    ? key.slice(2) + ":00"
+    : /^\d{4}-\d{2}$/.test(key)
+      ? new Date(key + "-01T12:00:00Z").toLocaleDateString("es-CO", { timeZone: "America/Bogota", month: "short" })
+      : new Date(key + "T12:00:00Z").toLocaleDateString("es-CO", { timeZone: "America/Bogota", day: "2-digit", weekday: keys.length <= 10 ? "short" : undefined });
+
+  const bucketKey = (date, stamp, expense = false) => hourly
+    ? "h:" + String(expense ? 12 : getHourInBogota(stamp)).padStart(2, "0")
+    : monthly ? date.slice(0, 7) : date;
+
+  for (const key of keys) rowsByDate.set(key, { key, label: labelFor(key), revenue: 0, cost: 0, expenses: 0, result: 0 });
+
+  for (const sale of validSales) {
+    const date = getDateKeyInBogota(sale.sold_at || sale.created_at);
+    const bucket = rowsByDate.get(bucketKey(date, sale.sold_at || sale.created_at));
+    if (!bucket) continue;
+    const itemData = itemsBySale.get(sale.id);
+    bucket.revenue += getSaleNetRevenueMinor(sale, itemData?.items || []);
+    bucket.cost += itemData?.cost || 0;
+  }
+
+  for (const expense of expenses || []) {
+    const date = getDateKeyInBogota(expense.expense_date);
+    const bucket = rowsByDate.get(bucketKey(date, expense.expense_date, true));
+    if (bucket) bucket.expenses += Number(expense.amount_minor) || 0;
+  }
+
+  for (const row of rowsByDate.values()) row.result = row.revenue - row.cost - row.expenses;
   return [...rowsByDate.values()];
 }
-
 
 function SimpleBars({ title, description, data, formatValue, badge = "7 días", footnote = "Valores calculados a partir de movimientos registrados, no de estimaciones.", colors }) {
   const maxValue = Math.max(1,...(data||[]).map((item)=>Math.abs(Number(item.value)||0)));
@@ -3965,7 +4020,7 @@ function AuthenticatedApp() {
       const tableNames=[
         "product_categories","products","product_images","product_variants","customers","suppliers",
         "sales","sale_items","sale_payments","purchases","purchase_items","purchase_payments",
-        "expenses","bank_accounts","bank_movements","stock_movements","audit_logs","quotes","quote_items","business_coupons"
+        "expenses","bank_accounts","bank_movements","stock_movements","cash_register_sessions","audit_logs","quotes","quote_items","business_coupons"
       ];
       const backup={format:"treseiscinco-business-backup-v1",generated_at:new Date().toISOString(),
         business:{id:activeBusiness.id,name:activeBusiness.name,currency_code:activeBusiness.currency_code,
@@ -4414,7 +4469,7 @@ function AuthenticatedApp() {
 
   async function submitAuth(event) {
     event.preventDefault();
-    if (mode === "signup" && (password.length < 12 || password.length > 128)) { setBusy(false); setError("La contraseña de una cuenta nueva debe tener entre 12 y 128 caracteres."); setNotice(""); return; }
+    if ((mode === "signup" || mode === "update-password") && (password.length < 12 || password.length > 128)) { setBusy(false); setError("La contraseña nueva debe tener entre 12 y 128 caracteres."); setNotice(""); return; }
     setBusy(true); setError(""); setNotice("");
     try {
       if (mode === "forgot") {
@@ -5386,13 +5441,18 @@ function AuthenticatedApp() {
     if (!Number.isSafeInteger(opening) || opening < 0) { setError("Escribe un monto inicial de caja válido."); return; }
     setCashRegisterSaving(true); setError(""); setNotice("");
     try {
-      const { data, error: insertError } = await supabase.from("cash_register_sessions")
-        .insert({business_id:activeBusiness.id,opened_by:session.user.id,currency_code:currencyCode,opening_cash_minor:opening})
-        .select("id,business_id,opened_by,closed_by,currency_code,opening_cash_minor,closing_cash_minor,expected_cash_minor,difference_minor,close_notes,status,opened_at,closed_at").single();
-      if (insertError) throw insertError;
-      setCashRegisterSession(data);
+      const { data, error: openError } = await supabase.rpc("open_cash_register_session", {
+        p_business_id: activeBusiness.id,
+        p_opening_cash_minor: opening
+      });
+      if (openError) throw openError;
+      const openedSession = data?.session || data;
+      if (!openedSession?.id || openedSession.status !== "open") {
+        throw new Error("El servidor no confirmó la apertura de la caja. Actualiza la pantalla antes de volver a intentarlo.");
+      }
+      setCashRegisterSession(openedSession);
       setCashRegisterOpenAmount("0");
-      setNotice("Caja abierta. Los cobros en efectivo de este turno quedarán asociados a tu usuario.");
+      setNotice("Caja abierta. El servidor registrará los movimientos de efectivo asociados a tu usuario.");
     } catch (error) { setError(friendlyError(error)); }
     finally { setCashRegisterSaving(false); }
   }
@@ -5405,31 +5465,35 @@ function AuthenticatedApp() {
     if (!Number.isSafeInteger(closing) || closing < 0) { setError("Escribe el efectivo contado al cerrar la caja."); return; }
     setCashRegisterSaving(true); setError(""); setNotice("");
     try {
-      const [{data:payments,error:paymentsError},{data:expenses,error:expensesError}] = await Promise.all([
-        supabase.from("sale_payments").select("amount_minor,payment_method,paid_at")
-          .eq("business_id",activeBusiness.id).eq("created_by",session.user.id)
-          .eq("payment_method","Efectivo").gte("paid_at",register.opened_at).lte("paid_at",new Date().toISOString()),
-        supabase.from("expenses").select("amount_minor,payment_method,created_at")
-          .eq("business_id",activeBusiness.id).eq("created_by",session.user.id)
-          .eq("payment_method","Efectivo").gte("created_at",register.opened_at).lte("created_at",new Date().toISOString())
-      ]);
-      if (paymentsError) throw paymentsError;
-      if (expensesError) throw expensesError;
-      const received=(payments||[]).reduce((sum,row)=>sum+Number(row.amount_minor||0),0);
-      const expenseTotal=(expenses||[]).reduce((sum,row)=>sum+Number(row.amount_minor||0),0);
-      const expected=Number(register.opening_cash_minor||0)+received-expenseTotal;
-      const {data,error:updateError}=await supabase.from("cash_register_sessions").update({
-        closed_by:session.user.id,closed_at:new Date().toISOString(),status:"closed",
-        closing_cash_minor:closing,expected_cash_minor:expected,difference_minor:closing-expected,
-        close_notes:cashRegisterCloseNotes.trim()||null,updated_at:new Date().toISOString()
-      }).eq("business_id",activeBusiness.id).eq("id",register.id).eq("status","open")
-        .select("id").maybeSingle();
-      if (updateError) throw updateError;
-      if (!data) throw new Error("La caja ya se cerró o no tienes permiso para modificarla.");
-      setCashRegisterSummary({received,expenses:expenseTotal,expected,count:(payments||[]).length});
+      const { data, error: closeError } = await supabase.rpc("close_cash_register_session", {
+        p_business_id: activeBusiness.id,
+        p_session_id: register.id,
+        p_closing_cash_minor: closing,
+        p_close_notes: cashRegisterCloseNotes.trim() || null
+      });
+      if (closeError) throw closeError;
+      if (!data?.session || data.session.status !== "closed") {
+        throw new Error("El servidor no confirmó el cierre. La caja puede seguir abierta; actualiza la pantalla antes de volver a intentarlo.");
+      }
+      const received = Number(data.cash_received_minor || 0);
+      const purchaseTotal = Number(data.cash_paid_purchases_minor || 0);
+      const expenseTotal = Number(data.cash_paid_expenses_minor || 0);
+      const expected = Number(data.expected_cash_minor || 0);
+      const difference = Number(data.difference_minor ?? (closing - expected));
+      setCashRegisterSummary({
+        received,
+        purchases: purchaseTotal,
+        expenses: expenseTotal,
+        expected,
+        count: Number(data.cash_received_count || 0)
+      });
       setCashRegisterSession(null);
       setCashRegisterCloseAmount(""); setCashRegisterCloseNotes("");
-      setNotice("Caja cerrada. Efectivo esperado: " + money(expected,currencyCode) + "; diferencia: " + money(closing-expected,currencyCode) + ".");
+      setNotice(
+        "Caja cerrada. Efectivo esperado: " + money(expected, currencyCode) +
+        "; diferencia: " + money(difference, currencyCode) +
+        ". Compras en efectivo: " + money(purchaseTotal, currencyCode) + "."
+      );
     } catch (error) { setError(friendlyError(error)); }
     finally { setCashRegisterSaving(false); }
   }
@@ -5978,7 +6042,7 @@ function AuthenticatedApp() {
     try {
       const [sales, expenses, purchasePayments] = await Promise.all([
         fetchAllProfitabilityRows(
-          () => supabase.from("sales").select("id,business_id,status,currency_code,total_minor,amount_paid_minor,sold_at,created_at")
+          () => supabase.from("sales").select("id,business_id,status,currency_code,subtotal_minor,discount_minor,tax_minor,total_minor,amount_paid_minor,sold_at,created_at")
             .eq("business_id", activeBusiness.id).order("sold_at", { ascending: false }).order("id", { ascending: true }),
           "ventas"
         ),
@@ -6000,7 +6064,7 @@ function AuthenticatedApp() {
           const ids = sales.slice(index, index + batchSize).map((sale) => sale.id);
           const rows = await fetchAllProfitabilityRows(
             () => supabase.from("sale_items")
-              .select("id,sale_id,product_id,item_name,quantity,unit_cost_minor,line_total_minor")
+              .select("id,sale_id,product_id,item_name,quantity,unit_cost_minor,discount_minor,tax_minor,line_total_minor")
               .eq("business_id", activeBusiness.id).in("sale_id", ids).order("created_at").order("id", { ascending: true }),
             "líneas de venta"
           );
@@ -7188,7 +7252,7 @@ function AuthenticatedApp() {
     const now = new Date(todayBogotaKey + "T12:00:00-05:00").getTime();
     return day >= now - 30 * 24 * 60 * 60 * 1000 && day <= now + 24 * 60 * 60 * 1000;
   };
-  const periodSales = profitabilitySales.filter((sale) => !["canceled", "refunded"].includes(sale.status) && profitInPeriod(sale.sold_at || sale.created_at));
+  const periodSales = profitabilitySales.filter((sale) => isSaleIncludedInProfitability(sale) && profitInPeriod(sale.sold_at || sale.created_at));
   const periodSaleIds = new Set(periodSales.map((sale) => sale.id));
   const periodSaleItems = profitabilitySaleItems.filter((item) => periodSaleIds.has(item.sale_id));
   const periodExpenses = profitabilityExpenses.filter((expense) => profitInPeriod(expense.expense_date));
@@ -7283,7 +7347,7 @@ function AuthenticatedApp() {
       ["Ingresos", statsCollected / unit],
       ["Gastos", statsExpensesTotal / unit],
       ["Compras pagadas", statsPaidPurchases / unit],
-      ["Balance", statsCashBalance / unit],
+      ["Flujo neto del periodo", statsCashBalance / unit],
       ["Ventas registradas", statsSalesTotal / unit],
       ["Pendiente por cobrar", statsOutstanding / unit],
       [],
@@ -7320,7 +7384,16 @@ function AuthenticatedApp() {
   const profitSalesTotal = periodSales.reduce((sum, sale) => sum + Number(sale.total_minor || 0), 0);
   const profitPaidTotal = periodSales.reduce((sum, sale) => sum + Number(sale.amount_paid_minor || 0), 0);
   const profitCostOfSales = periodSaleItems.reduce((sum, item) => sum + Math.round(Number(item.unit_cost_minor || 0) * Number(item.quantity || 0)), 0);
-  const profitLineRevenue = periodSaleItems.reduce((sum, item) => sum + Number(item.line_total_minor || 0), 0);
+  const profitabilityItemsBySale = periodSaleItems.reduce((groups, item) => {
+    if (!groups.has(item.sale_id)) groups.set(item.sale_id, []);
+    groups.get(item.sale_id).push(item);
+    return groups;
+  }, new Map());
+  const profitNetItemRows = periodSales.flatMap((sale) =>
+    getSaleNetItemRevenueRows(sale, profitabilityItemsBySale.get(sale.id) || [])
+      .map(({ item, revenue_minor }) => ({ ...item, net_revenue_minor: revenue_minor }))
+  );
+  const profitLineRevenue = profitNetItemRows.reduce((sum, item) => sum + item.net_revenue_minor, 0);
   const profitGross = profitLineRevenue - profitCostOfSales;
   const profitExpenseTotal = periodExpenses.reduce((sum, expense) => sum + Number(expense.amount_minor || 0), 0);
   const profitNet = profitGross - profitExpenseTotal;
@@ -7331,11 +7404,11 @@ function AuthenticatedApp() {
     groups[category].count += 1;
     return groups;
   }, {})).sort((a, b) => b.amount - a.amount);
-  const profitByItem = Object.values(periodSaleItems.reduce((groups, item) => {
+  const profitByItem = Object.values(profitNetItemRows.reduce((groups, item) => {
     const name = item.item_name || "Artículo sin nombre";
     if (!groups[name]) groups[name] = { name, quantity: 0, revenue: 0, cost: 0 };
     groups[name].quantity += Number(item.quantity || 0);
-    groups[name].revenue += Number(item.line_total_minor || 0);
+    groups[name].revenue += Number(item.net_revenue_minor || 0);
     groups[name].cost += Math.round(Number(item.unit_cost_minor || 0) * Number(item.quantity || 0));
     return groups;
   }, {})).sort((a, b) => (b.revenue - b.cost) - (a.revenue - a.cost));
@@ -8310,7 +8383,7 @@ function AuthenticatedApp() {
                 <article className="stats-metric panel stats-income"><span>Ingresos</span><strong>{money(statsCollected, currencyCode)}</strong><small>Pagos recibidos en el periodo</small></article>
                 <article className="stats-metric panel"><span>Gastos</span><strong>{money(statsExpensesTotal, currencyCode)}</strong><small>{statsPeriodExpenses.length} {statsPeriodExpenses.length === 1 ? "gasto registrado" : "gastos registrados"}</small></article>
                 <article className="stats-metric panel"><span>Compras pagadas</span><strong>{money(statsPaidPurchases, currencyCode)}</strong><small>Pagos de compras del periodo</small></article>
-                <article className={"stats-metric panel stats-balance" + (statsCashBalance < 0 ? " profit-negative" : " profit-positive")}><span>Balance</span><strong>{money(statsCashBalance, currencyCode)}</strong><small>Ingresos − gastos − compras pagadas</small></article>
+                <article className={"stats-metric panel stats-balance" + (statsCashBalance < 0 ? " profit-negative" : " profit-positive")}><span>Flujo neto del periodo</span><strong>{money(statsCashBalance, currencyCode)}</strong><small>Entradas cobradas − gastos − pagos de compras. No representa el saldo bancario actual.</small></article>
               </div>
               <div className="chart-type-picker" role="group" aria-label="Tipo de gráfico"><button type="button" className={statsChartType === "bars" ? "active" : ""} aria-pressed={statsChartType === "bars"} onClick={() => setStatsChartType("bars")}>Barras</button><button type="button" className={statsChartType === "pie" ? "active" : ""} aria-pressed={statsChartType === "pie"} onClick={() => setStatsChartType("pie")}>Pastel</button><button type="button" className={statsChartType === "area" ? "active" : ""} aria-pressed={statsChartType === "area"} onClick={() => setStatsChartType("area")}>Área</button></div>{statsChartType === "bars" ? <SimpleBars title="Balance diario" description="Diferencia entre pagos recibidos y salidas registradas durante los últimos siete días." data={balanceChartData.map((item)=>({key:item.key,label:item.label,value:item.value}))} formatValue={(value)=>money(value,currencyCode)} /> : statsChartType === "pie" ? <SimplePie title="Distribución del balance" description="Comparación de ingresos y salidas en el periodo seleccionado." data={[{label:"Ingresos",value:statsCollected},{label:"Gastos",value:statsExpensesTotal},{label:"Compras pagadas",value:statsPaidPurchases}]} formatValue={(value)=>money(value,currencyCode)} /> : <SimpleArea title="Evolución del balance" description="Pagos recibidos y salidas por día de los últimos siete días." badge="7 días" data={balanceChartData.map((item)=>({key:item.key,label:item.label,value:item.value}))} series={[{key:"value",label:"Balance",color:"#2563EB"}]} formatValue={(value)=>money(value,currencyCode)} />}
               <section className="stats-insight-section">
@@ -8421,11 +8494,11 @@ function AuthenticatedApp() {
               <div className="profitability-breakdowns">
                 <section className="profit-breakdown panel">
                   <div className="profit-breakdown-heading"><div><h3>Costos por artículo vendido</h3><p>Lo que costaron los artículos que ya vendiste.</p></div></div>
-                  {periodSaleItems.length ? <div className="profit-data-list">{Object.values(periodSaleItems.reduce((groups, item) => {
+                  {profitNetItemRows.length ? <div className="profit-data-list">{Object.values(profitNetItemRows.reduce((groups, item) => {
                     const name = item.item_name || "Artículo sin nombre";
                     if (!groups[name]) groups[name] = { name, quantity: 0, revenue: 0, cost: 0 };
                     groups[name].quantity += Number(item.quantity || 0);
-                    groups[name].revenue += Number(item.line_total_minor || 0);
+                    groups[name].revenue += Number(item.net_revenue_minor || 0);
                     groups[name].cost += Math.round(Number(item.unit_cost_minor || 0) * Number(item.quantity || 0));
                     return groups;
                   }, {})).sort((a, b) => (b.revenue - b.cost) - (a.revenue - a.cost)).slice(0, 12).map((item) => <div className="profit-data-row" key={item.name}>
@@ -9060,7 +9133,7 @@ function AuthenticatedApp() {
                 <div className="settings-icon"><AppIcon name="settings" size={23}/></div>
                 <h3>Copias de seguridad</h3>
                 <p>Descarga una copia de los registros accesibles de este negocio. El archivo incluye las filas que tus permisos permiten consultar y señala cualquier tabla que no se haya podido exportar.</p>
-                <div className="settings-data-card"><div><strong>Copia de seguridad del negocio</strong><p>Productos, categorías, clientes, proveedores, ventas, pagos, compras, gastos, movimientos, cotizaciones, cupones y auditoría cuando los permisos lo permitan.</p></div><button type="button" className="primary-button" onClick={downloadBusinessBackup} disabled={backupBusy||!activeBusiness?.id||activeBusiness?.role!=="owner"}>{backupBusy?"Preparando copia…":"Descargar copia"}</button></div>
+                <div className="settings-data-card"><div><strong>Copia de seguridad del negocio</strong><p>Productos, categorías, clientes, proveedores, ventas, pagos, compras, gastos, cajas, movimientos, cotizaciones, cupones y auditoría cuando los permisos lo permitan.</p></div><button type="button" className="primary-button" onClick={downloadBusinessBackup} disabled={backupBusy||!activeBusiness?.id||activeBusiness?.role!=="owner"}>{backupBusy?"Preparando copia…":"Descargar copia"}</button></div>
                 {activeBusiness?.role!=="owner"&&<p className="helper-text">Solo el propietario puede descargar una copia completa del negocio.</p>}
                 <div className="tax-guidance-note"><strong>Importante</strong><p>La descarga no incluye contraseñas, credenciales privadas de pasarelas ni cuentas de acceso. Guarda el archivo en un lugar seguro; contiene información comercial y datos de clientes.</p></div>
               </div>
