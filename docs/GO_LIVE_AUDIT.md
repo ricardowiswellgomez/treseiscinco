@@ -15,8 +15,10 @@ No se aplicaron las migraciones del PR a producción ni se revocaron escrituras 
 ### Código y CI
 
 - PR #80 permanece abierto y en borrador.
-- Las ejecuciones #493 y #494 terminaron en `success`. La siguiente ejecución debe validar el nuevo aislamiento de permisos del workflow y el ajuste del buscador público.
-- GitHub Actions, ejecución **#494**, terminó en `success`: auditoría de dependencias de alta severidad, sintaxis del Worker, pruebas, build web, verificación de la ruta APK, APK instalable, icono de marca y dry-run de Wrangler. El cambio posterior separa el despliegue en otro job y aún debe pasar CI.
+- GitHub Actions, ejecución **#506**, terminó en `success` sobre el HEAD previo: pasó instalación limpia, auditoría de dependencias de alta severidad, sintaxis del Worker, pruebas, build web, verificación de la ruta APK, APK instalable, icono de marca y validación de activos estáticos.
+- En #506, el job `build` terminó en `success` y el job `Deploy production Worker` quedó `skipped`, como corresponde a un evento de pull request. No se publicó el Worker.
+- Después de #506 se añadieron controles de sesión obligatoria para movimientos en efectivo y pruebas de regresión; **el HEAD actual debe pasar una nueva ejecución completa de CI**. No declarar esas últimas modificaciones aprobadas hasta que termine.
+- El artefacto Android de #494 es histórico y de prueba; no se publicó como APK de producción.
 - El artefacto `treseiscinco-apk` se generó correctamente (4.281.532 bytes; SHA-256 `489fd6566d39b7e997943c1ef7c2e74150dfe80e2df88b1c9766abdd2048898d`). Es un artefacto de prueba; no se publicó como APK de producción.
 - El despliegue del Worker se omitió correctamente porque el evento fue un pull request. El APK se incorpora al directorio `dist` del mismo build para publicarlo como activo estático.
 - `main` permanece en `a4c67b1d3f48b1eff59bdea729112f843bc7e459`.
@@ -123,18 +125,26 @@ La función autenticada `record_platform_activity` registra actividad del propio
 
 ### P1 — Conciliación de caja por sesión
 
-La revisión de los RPC y formularios confirmó que se pueden registrar ventas, abonos y compras en efectivo sin comprobar que el usuario tenga una sesión de caja abierta. El cierre solo suma movimientos creados dentro del intervalo de una sesión; por tanto, el efectivo registrado antes de abrirla o después de cerrarla queda fuera de ese cierre. Esto no es una escritura no autorizada, pero sí una brecha de conciliación operativa. Antes de imponer un bloqueo, debe definirse si abrir caja será obligatorio para todo movimiento en efectivo o si la caja seguirá siendo opcional con un reporte explícito de movimientos sin sesión.
+La migración 001 del PR ahora establece una regla uniforme: **todo nuevo pago en efectivo (venta, abono o compra) y todo gasto en efectivo debe pertenecer a una sesión abierta por el mismo usuario y negocio**. La comprobación se hace en PostgreSQL, dentro de los triggers, no solo en la interfaz.
+
+El guardado y el cierre comparten el mismo bloqueo transaccional. Si un pago queda esperando mientras se cierra la caja, al obtener el bloqueo vuelve a comprobar la sesión; al encontrarla cerrada, rechaza el pago. Así evita que un movimiento entre justo después del cierre y quede fuera de la suma. La identidad del usuario autenticado prevalece sobre cualquier `created_by` enviado por el cliente.
+
+Una venta o compra sin abono inicial puede seguir registrándose sin caja; el usuario deberá abrirla antes de registrar un abono en efectivo. Los pagos bancarios/electrónicos no quedan sujetos a esta regla. **La corrección está en el PR, no en producción, y todavía requiere CI del HEAD actual y ensayo en una base aislada.**
+
+Los movimientos históricos en efectivo que se registraron sin sesión no se asignan automáticamente a una caja. Deben identificarse y conciliarse por separado antes de declarar completos los cierres históricos.
 
 ## Estado de salida
 
-- [ ] CI del HEAD actual del PR aprobado; #494 validó la revisión anterior y aún falta una ejecución completa sobre el HEAD más reciente.
+- [ ] CI del HEAD actual del PR aprobado; #506 aprobó el HEAD anterior, pero las últimas correcciones de caja y sus pruebas aún requieren una ejecución completa.
 - [x] APK de prueba generada y validada.
 - [x] Reglas administradas gratuitas de Cloudflare desplegadas y verificadas por API.
 - [x] TLS/HTTPS/HSTS comprobados.
 - [x] Privilegios directos sobre las cuatro tablas de métricas comprobados.
 - [ ] Historial de migraciones reconciliado y reproducible.
 - [ ] Corregir y verificar en ensayo la exposición de SKU, existencias exactas y metadatos internos del RPC público de catálogo.
-- [ ] Definir y probar la política de caja para pagos en efectivo sin sesión abierta.
+- [x] Política definida en el PR: exigir sesión abierta para nuevos movimientos en efectivo del usuario.
+- [ ] Probar en una base aislada la concurrencia entre pagos y cierre de caja; validar reversión de ventas/compras con abono sin sesión.
+- [ ] Identificar y conciliar movimientos históricos en efectivo sin sesión.
 - [ ] Migraciones probadas en rama/entorno de desarrollo.
 - [ ] Pruebas transaccionales y de aislamiento multiempresa aprobadas.
 - [ ] CAPTCHA nativo y protección de contraseñas filtradas activados en Supabase Auth.
