@@ -8,7 +8,7 @@
 
 **Mantener el PR #80 abierto y en borrador; no fusionar ni desplegar todavía.** El endurecimiento de catálogo, caja, dependencias y CSP está implementado en la rama y validado por CI, pero la nueva interfaz no está publicada. Siguen pendientes controles de cuenta (CAPTCHA, MFA, protección de `main` y secreto de despliegue), reconciliación del historial de migraciones y conciliación del pago histórico. La organización Supabase está en plan Free: las ramas de ensayo y la protección nativa de contraseñas filtradas requieren Pro.
 
-Se aplicaron seis migraciones de endurecimiento en producción (privacidad del catálogo, `search_path`, índices FK, caja y limpieza de índice duplicado). **No se aplicó** el SQL posdespliegue que revoca escrituras directas de caja; debe esperar al despliegue de la interfaz nueva. `main` sigue intacta y el Worker no se desplegó desde el PR.
+Se aplicaron seis migraciones de endurecimiento en producción (privacidad del catálogo, `search_path`, índices FK, RPC de caja, limpieza de índice duplicado y trigger transitorio para escrituras directas antiguas). **No se aplicó** el SQL posdespliegue que revoca escrituras directas de caja; debe esperar al despliegue de la interfaz nueva. `main` sigue intacta y el Worker no se desplegó desde el PR.
 
 ## Estado confirmado
 
