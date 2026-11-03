@@ -29,6 +29,7 @@ test("server close calculation includes cash sales, supplier payments and expens
   assert.ok(serverMigration.includes("expenses_cash_session_idx"));
   assert.ok(serverMigration.includes("cash_register_sessions_opened_by_idx"));
   assert.ok(serverMigration.includes("cash_register_sessions_closed_by_idx"));
+  assert.equal((serverMigration.match(/SET search_path TO ''/g) || []).length, 2);
 });
 
 test("cash sessions are audited and direct API writes are removed after rollout", () => {
