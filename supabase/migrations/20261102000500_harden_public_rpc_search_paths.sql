@@ -1,25 +1,32 @@
--- Harden every exposed SECURITY DEFINER RPC, not only anonymous storefront calls.
--- Keep trusted application schemas on the path and put pg_temp explicitly last.
+-- Harden every exposed SECURITY DEFINER RPC, preserving its trusted schemas
+-- while ensuring pg_temp cannot shadow application objects.
 -- Functions already using search_path = '' remain unchanged.
 DO $migration$
 DECLARE
   v_function regprocedure;
+  v_path text;
 BEGIN
-  FOR v_function IN
-    SELECT p.oid::regprocedure
+  FOR v_function, v_path IN
+    SELECT
+      p.oid::regprocedure,
+      pg_catalog.btrim(pg_catalog.substring(cfg.setting FROM length('search_path=') + 1))
     FROM pg_catalog.pg_proc p
     JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+    CROSS JOIN LATERAL pg_catalog.unnest(coalesce(p.proconfig, ARRAY[]::text[])) AS cfg(setting)
     WHERE n.nspname = 'public'
       AND p.prosecdef
       AND (
         pg_catalog.has_function_privilege('anon', p.oid, 'EXECUTE')
         OR pg_catalog.has_function_privilege('authenticated', p.oid, 'EXECUTE')
       )
+      AND cfg.setting LIKE 'search_path=%'
+      AND pg_catalog.btrim(pg_catalog.substring(cfg.setting FROM length('search_path=') + 1)) !~ '(^|,)\\s*pg_temp\\s*$'
       AND NOT coalesce(p.proconfig, ARRAY[]::text[]) @> ARRAY['search_path=""']
   LOOP
     EXECUTE pg_catalog.format(
-      'ALTER FUNCTION %s SET search_path TO pg_catalog, public, private, auth, extensions, pg_temp',
-      v_function
+      'ALTER FUNCTION %s SET search_path TO %s, pg_temp',
+      v_function,
+      v_path
     );
   END LOOP;
 END;
