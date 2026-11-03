@@ -1,7 +1,6 @@
 const DB="https://maogebecfottfvlrjbho.supabase.co",MODEL="@cf/meta/llama-3.3-70b-instruct-fp8-fast",CAP=1000;
 const TURNSTILE_SITEKEY="0x4AAAAAAFqjrap1qCzoZOdi",PUBLISHABLE_KEY="sb_publishable_Vte7r7Sm7tlo8S7B1N4Z0g_NzmENoFX";
 const ALLOWED_SIGNUP_ORIGINS=new Set(["https://treseiscinco.com","https://www.treseiscinco.com","https://treseiscinco.ricardowiswellgomez.workers.dev"]);
-const ALLOWED_SIGNUP_HOSTS=new Set(["treseiscinco.com","www.treseiscinco.com","treseiscinco.ricardowiswellgomez.workers.dev"]);
 const DISPOSABLE_SIGNUP_DOMAINS=new Set(["37xiao.com","temp-mail.org","temp-mail.io","tempmail.com","tempmail.net","10minutemail.com","10minutemail.net","guerrillamail.com","guerrillamail.net","mailinator.com","yopmail.com","yopmail.fr","dispostable.com","maildrop.cc","getnada.com","trashmail.com","trashmail.net","sharklasers.com","grr.la","fakeinbox.com","mohmal.com","emailondeck.com","throwawaymail.com","mintemail.com","tempr.email","inboxkitten.com","discard.email","crazymailing.com","burnermail.io","mailnesia.com","tempail.com","mailcatch.com","mytemp.email","tempmailo.com"]);
 const applySecurityHeaders=headers=>{
  headers.set("X-Content-Type-Options","nosniff");
