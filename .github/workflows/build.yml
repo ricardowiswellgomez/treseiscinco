@@ -3,9 +3,6 @@ name: Build treseiscinco
 on:
   push:
     branches: [main]
-    # Updating only the already-built APK must not trigger another Android build.
-    paths-ignore:
-      - "public/treseiscinco.apk"
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -17,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -33,8 +30,6 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
-      # Temporary one-time bootstrap: resolve and export the exact lockfile from the CI environment.
-      # This step is removed after package-lock.json is committed to the repository.
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
       - name: Audit dependencies for high-severity vulnerabilities
@@ -164,57 +159,48 @@ jobs:
           }
           NODE
           echo "APK label, actual PNG payloads verified; adaptive foreground artwork and adaptive XML verified."
-      - name: Publish APK for Cloudflare static assets
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          mkdir -p public
-          cp dist/treseiscinco.apk public/treseiscinco.apk
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/treseiscinco.apk
-          if git diff --cached --quiet; then
-            echo "The public APK is already up to date."
-          else
-            git commit -m "chore: publish latest Android APK"
-            # Source/CSS commits can land while the APK is compiling. Rebase this
-            # APK-only commit onto the latest main so publication never rejects fresh app work.
-            for attempt in 1 2 3; do
-              git fetch origin main
-              if ! git rebase origin/main; then
-                conflicts="$(git diff --name-only --diff-filter=U)"
-                if [ "$conflicts" = "public/treseiscinco.apk" ]; then
-                  # The only conflict can be the binary APK: keep this run's newly built APK.
-                  git checkout --theirs -- public/treseiscinco.apk
-                  git add public/treseiscinco.apk
-                  GIT_EDITOR=true git rebase --continue
-                else
-                  git rebase --abort
-                  echo "ERROR: unexpected conflict while rebasing the APK publication commit."
-                  printf '%s\n' "$conflicts"
-                  exit 1
-                fi
-              fi
-              if git push origin HEAD:main; then
-                break
-              fi
-              if [ "$attempt" -eq 3 ]; then
-                echo "ERROR: could not publish APK after syncing with latest main."
-                exit 1
-              fi
-              echo "The main branch advanced during APK publication; syncing again."
-            done
-          fi
-      - name: Upload Android APK artifact
+      - name: Upload Worker static assets
         uses: actions/upload-artifact@v4
         with:
-          name: treseiscinco-apk
-          path: dist/treseiscinco.apk
+          name: treseiscinco-dist
+          path: dist/
           if-no-files-found: error
-          retention-days: 30
-      - name: Validate Cloudflare Worker bundle
-        run: npx wrangler deploy --dry-run
+          retention-days: 1
+
+  deploy:
+    name: Deploy production Worker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout tested source commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install deployment dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Download tested static assets
+        uses: actions/download-artifact@v4
+        with:
+          name: treseiscinco-dist
+          path: dist/
+      - name: Ensure main has not advanced since this build
+        run: |
+          git fetch origin main
+          if [ "$(git rev-parse origin/main)" != "$GITHUB_SHA" ]; then
+            echo "::error::Deployment cancelled because main advanced after this build. A fresh CI run is required."
+            exit 1
+          fi
       - name: Deploy to Cloudflare Workers
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || 'f561b01677b1330ed1ee95ad482a54d8' }}
@@ -225,14 +211,11 @@ jobs:
           fi
           npx wrangler deploy
       - name: Verify downloadable APK in production
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           set -euo pipefail
           url="https://treseiscinco.com/download/apk"
           headers="/tmp/treseiscinco-apk-headers.txt"
           apk="/tmp/treseiscinco-downloaded.apk"
-          # Cloudflare Workers Builds can finish a little after GitHub publishes the APK commit.
-          # Poll the real public endpoint until it serves the APK attachment rather than cached HTML.
           for attempt in $(seq 1 12); do
             rm -f "$headers" "$apk"
             if curl -sS --connect-timeout 5 --max-time 10 --location -D "$headers" -o "$apk" "$url"; then
@@ -251,4 +234,3 @@ jobs:
           echo "--- Response headers from the last attempt ---" >&2
           cat "$headers" 2>/dev/null || true
           exit 1
-
