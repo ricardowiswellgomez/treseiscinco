@@ -220,8 +220,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || 'f561b01677b1330ed1ee95ad482a54d8' }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::warning::Cloudflare deploy skipped: configure the repository secret CLOUDFLARE_API_TOKEN to enable automatic production deployments."
-            exit 0
+            echo "::error::Cloudflare deployment blocked: configure the repository secret CLOUDFLARE_API_TOKEN. The production workflow must not pass without deploying the Worker."
+            exit 1
           fi
           npx wrangler deploy
       - name: Verify downloadable APK in production
