@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
-const serverMigration = await readFile(new URL("../supabase/migrations/20261102000100_add_server_cash_register_rpcs.sql", import.meta.url), "utf8");
+const serverMigration = await readFile(new URL("../supabase/migrations/20261103173636_add_server_cash_register_rpcs.sql", import.meta.url), "utf8");
 const lockdownMigration = await readFile(new URL("../supabase/post-deploy/20261102000400_restrict_cash_register_direct_writes.sql", import.meta.url), "utf8");
 
 test("cash opening and closing use server-side RPCs, not direct table writes", () => {
