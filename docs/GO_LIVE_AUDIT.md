@@ -123,7 +123,7 @@ La revisión de los RPC y formularios confirmó que se pueden registrar ventas, 
 
 ## Estado de salida
 
-- [x] CI del commit actual del PR aprobado.
+- [ ] CI del HEAD actual del PR aprobado; #494 validó la revisión anterior y aún falta una ejecución completa sobre el HEAD más reciente.
 - [x] APK de prueba generada y validada.
 - [x] Reglas administradas gratuitas de Cloudflare desplegadas y verificadas por API.
 - [x] TLS/HTTPS/HSTS comprobados.
