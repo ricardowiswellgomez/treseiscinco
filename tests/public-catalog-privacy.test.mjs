@@ -22,14 +22,19 @@ test("public catalog JSON does not disclose internal inventory quantities, SKU o
   assert.ok(migration.includes("SET search_path TO ''"), "SECURITY DEFINER catalog function must use an empty search path");
 });
 
-test("all other public SECURITY DEFINER RPCs have an empty search path", () => {
+test("exposed SECURITY DEFINER RPCs use a fixed path with pg_temp last or an empty path", () => {
+  assert.match(pathMigration, /p\\.prosecdef/);
+  assert.match(pathMigration, /has_function_privilege\\('anon', p\\.oid, 'EXECUTE'\\)/);
+  assert.match(pathMigration, /has_function_privilege\\('authenticated', p\\.oid, 'EXECUTE'\\)/);
+  assert.match(pathMigration, /SET search_path TO pg_catalog, public, private, auth, extensions, pg_temp/);
+  assert.match(pathMigration, /search_path=\\"\\"/);
   for (const signature of [
     "get_public_catalog_image(uuid, uuid, text)",
     "get_public_catalog_variant_image(uuid, uuid, uuid, text)",
     "get_public_coupon_quote(uuid, text, bigint)",
     "get_public_store_order_status(text, uuid)",
     "resolve_public_catalog_slug(text)"
-  ]) assert.ok(pathMigration.includes("ALTER FUNCTION public." + signature + " SET search_path = ''"), "missing search_path hardening: " + signature);
+  ]) assert.ok(pathMigration.includes("ALTER FUNCTION public." + signature + " SET search_path = ''"), "missing empty search_path: " + signature);
 });
 
 test("storefront UI uses availability only as a display boolean and leaves stock validation to checkout", () => {
