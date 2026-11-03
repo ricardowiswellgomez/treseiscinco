@@ -33,12 +33,50 @@ BEGIN
     IF auth.uid() IS NOT NULL THEN
       NEW.created_by := auth.uid();
     END IF;
+    IF NEW.payment_method = 'Efectivo' AND NEW.created_by IS NOT NULL THEN
+      PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended(NEW.business_id::text || ':' || NEW.created_by::text, 0)
+      );
+      NEW.created_at := pg_catalog.clock_timestamp();
+    END IF;
   ELSE
     NEW.created_by := OLD.created_by;
   END IF;
   RETURN NEW;
 END;
 $function$;
+
+-- Serialize cash payment inserts against the matching user's drawer close.
+CREATE OR REPLACE FUNCTION private.lock_cash_register_payment()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor uuid := coalesce(NEW.created_by, auth.uid());
+BEGIN
+  IF NEW.payment_method = 'Efectivo'
+     AND NEW.business_id IS NOT NULL
+     AND v_actor IS NOT NULL THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(NEW.business_id::text || ':' || v_actor::text, 0)
+    );
+    -- now() is transaction-start time and may predate a lock wait.
+    NEW.created_at := pg_catalog.clock_timestamp();
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS lock_cash_register_sale_payment ON public.sale_payments;
+CREATE TRIGGER lock_cash_register_sale_payment
+BEFORE INSERT ON public.sale_payments
+FOR EACH ROW EXECUTE FUNCTION private.lock_cash_register_payment();
+
+DROP TRIGGER IF EXISTS lock_cash_register_purchase_payment ON public.purchase_payments;
+CREATE TRIGGER lock_cash_register_purchase_payment
+BEFORE INSERT ON public.purchase_payments
+FOR EACH ROW EXECUTE FUNCTION private.lock_cash_register_payment();
 
 DROP TRIGGER IF EXISTS set_expense_created_by ON public.expenses;
 CREATE TRIGGER set_expense_created_by
@@ -68,6 +106,7 @@ AS $function$
 DECLARE
   v_actor uuid := auth.uid();
   v_currency_code character(3);
+  v_opened_at timestamptz;
   v_session public.cash_register_sessions%ROWTYPE;
 BEGIN
   IF v_actor IS NULL THEN
@@ -96,6 +135,8 @@ BEGIN
     hashtextextended(p_business_id::text || ':' || v_actor::text, 0)
   );
 
+  v_opened_at := pg_catalog.clock_timestamp();
+
   IF EXISTS (
     SELECT 1
     FROM public.cash_register_sessions s
@@ -122,9 +163,9 @@ BEGIN
     v_currency_code,
     p_opening_cash_minor,
     'open',
-    now(),
-    now(),
-    now()
+    v_opened_at,
+    v_opened_at,
+    v_opened_at
   )
   RETURNING * INTO v_session;
 
@@ -145,6 +186,8 @@ SET search_path TO ''
 AS $function$
 DECLARE
   v_actor uuid := auth.uid();
+  v_session_owner uuid;
+  v_close_at timestamptz;
   v_session public.cash_register_sessions%ROWTYPE;
   v_received bigint := 0;
   v_purchases bigint := 0;
@@ -169,6 +212,23 @@ BEGIN
   IF NOT private.can_access_business(p_business_id, 'sales_manage') THEN
     RAISE EXCEPTION 'No tienes permiso para cerrar cajas de este negocio.';
   END IF;
+
+  -- Coordinate cash writes and close using the same per-user/business lock.
+  SELECT s.opened_by
+  INTO v_session_owner
+  FROM public.cash_register_sessions s
+  WHERE s.id = p_session_id
+    AND s.business_id = p_business_id
+    AND s.status = 'open';
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'La caja ya está cerrada o no pertenece a este negocio.';
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_business_id::text || ':' || v_session_owner::text, 0)
+  );
+  v_close_at := pg_catalog.clock_timestamp();
 
   SELECT s.*
   INTO v_session
@@ -196,7 +256,7 @@ BEGIN
     -- Attribute cash to the drawer when it is recorded, not by the editable
     -- accounting date (paid_at is date-only in the UI and may be backdated).
     AND sp.created_at >= v_session.opened_at
-    AND sp.created_at <= now();
+    AND sp.created_at <= v_close_at;
 
   SELECT coalesce(sum(pp.amount_minor), 0), count(*)
   INTO v_purchases, v_purchase_count
@@ -207,7 +267,7 @@ BEGIN
     -- Keep the financial paid_at date for reports, but use creation time for
     -- the physical cash drawer session.
     AND pp.created_at >= v_session.opened_at
-    AND pp.created_at <= now();
+    AND pp.created_at <= v_close_at;
 
   SELECT coalesce(sum(e.amount_minor), 0), count(*)
   INTO v_expenses, v_expense_count
@@ -216,20 +276,20 @@ BEGIN
     AND e.created_by = v_session.opened_by
     AND e.payment_method = 'Efectivo'
     AND e.created_at >= v_session.opened_at
-    AND e.created_at <= now();
+    AND e.created_at <= v_close_at;
 
   v_expected := v_session.opening_cash_minor + v_received - v_purchases - v_expenses;
 
   UPDATE public.cash_register_sessions
   SET
     closed_by = v_actor,
-    closed_at = now(),
+    closed_at = v_close_at,
     status = 'closed',
     closing_cash_minor = p_closing_cash_minor,
     expected_cash_minor = v_expected,
     difference_minor = p_closing_cash_minor - v_expected,
     close_notes = nullif(btrim(coalesce(p_close_notes, '')), ''),
-    updated_at = now()
+    updated_at = v_close_at
   WHERE id = v_session.id
     AND business_id = p_business_id
     AND status = 'open'
