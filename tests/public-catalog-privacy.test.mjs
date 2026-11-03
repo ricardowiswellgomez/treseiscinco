@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const migration = await readFile(new URL("../supabase/migrations/20261103173103_redact_public_catalog_internal_fields.sql", import.meta.url), "utf8");
-const pathMigration = await readFile(new URL("../supabase/migrations/20261102000500_harden_public_rpc_search_paths.sql", import.meta.url), "utf8");
+const pathMigration = await readFile(new URL("../supabase/migrations/20261103173342_harden_public_rpc_search_paths.sql", import.meta.url), "utf8");
 
 test("public catalog JSON does not disclose internal inventory quantities, SKU or tax code", () => {
   for (const field of [
