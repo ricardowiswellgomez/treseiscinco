@@ -26,6 +26,10 @@ test("Worker sets baseline browser security response headers", () => {
     "Permissions-Policy",
     "Strict-Transport-Security"
   ]) assert.ok(worker.includes(header), "missing " + header);
-  assert.match(worker, /function applySecurityHeaders/);
-  assert.match(worker, /function secureResponse/);
+  assert.match(worker, /const applySecurityHeaders\\s*=/);
+  assert.match(worker, /const secureResponse\\s*=/);
+  assert.match(worker, /return secureResponse\\(new Response\\(null,\\{status:302/);
+  assert.match(worker, /return secureResponse\\(new Response\\(apk\\.body/);
+  assert.match(worker, /return secureResponse\\(new Response\\(mp3/);
+  assert.match(worker, /return secureResponse\\(new Response\\("<!doctype html/);
 });
