@@ -15,12 +15,11 @@ Se aplicaron cinco migraciones de endurecimiento en producción (privacidad del 
 ### Código y CI
 
 - PR #80 permanece abierto y en borrador.
-- GitHub Actions **#526 falló** porque `tests/database-indexes.test.mjs` todavía leía el nombre anterior `20261102000600_add_missing_foreign_key_indexes.sql` después de alinear la migración con su versión real de producción. Las demás pruebas pasaron; el fallo no fue de la lógica de índices.
-- Se corrigió esa referencia en `tests/database-indexes.test.mjs` para leer `20261103173358_add_missing_foreign_key_indexes.sql`.
-- GitHub Actions **#528 terminó en `success`** sobre el HEAD de código `9f009f70e9a26d4b95309dd7e7ac44dfe119f4955`: instalación limpia, auditoría de dependencias de alta severidad, sintaxis del Worker, las 95 pruebas automatizadas, build web, verificación de la ruta Android, generación del APK, validación del icono oficial y carga de activos estáticos.
-- En #528, el job `Deploy production Worker` quedó `skipped`, correctamente por tratarse de un pull request. No se desplegó el Worker. La actualización documental posterior no modifica el código probado: [ejecución #528](https://github.com/ricardowiswellgomez/treseiscinco/actions/runs/41687163439).
-- Artefacto `treseiscinco-dist`: 4.693.595 bytes; SHA-256 `54f92252019f6828ec8b2cba5173eb39a4107a1b3a0dac83025b8bb19a672fcc`. Es un artefacto de prueba, expira el 4 de noviembre de 2026 y no se publicó en producción.
-- El despliegue del Worker se omitió correctamente porque el evento fue un pull request. El APK se incorpora al directorio `dist` del mismo build para publicarlo como activo estático.
+- GitHub Actions **#526 falló** porque `tests/database-indexes.test.mjs` todavía leía el nombre anterior de la migración de índices. Se actualizó la prueba al nombre real de producción.
+- GitHub Actions **#532 terminó en `success`** y pasó build, pruebas, verificación Android, APK e icono; era anterior a la sincronización exacta de la versión de la nueva migración de compatibilidad.
+- GitHub Actions **#535 terminó en `success`** sobre el HEAD actual `fd9f3ed60a486cfc22dc4f63e2ec39bb014a0467`: `npm ci`, auditoría de dependencias de alta severidad, sintaxis del Worker, **97 pruebas (97 aprobadas, 0 fallidas)**, build web, verificación de ruta Android, generación del APK, icono oficial y carga de activos estáticos.
+- En #535, el job `Deploy production Worker` quedó `skipped`, correctamente por tratarse de un pull request. No se publicó el Worker: [ejecución #535](https://github.com/ricardowiswellgomez/treseiscinco/actions/runs/41689479974).
+- Artefacto `treseiscinco-dist`: 4.693.594 bytes; SHA-256 `8329920725ab810e9de2d3b013fbbff93a1b49b05bfc84bcb126c51167fc5865`. Es temporal, expira el 4 de noviembre de 2026 y no se publicó en producción.
 - `main` permanece en `a4c67b1d3f48b1eff59bdea729112f843bc7e459`.
 
 ### Supabase — base de datos
