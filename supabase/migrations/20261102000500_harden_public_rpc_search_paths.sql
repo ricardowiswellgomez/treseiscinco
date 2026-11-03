@@ -20,7 +20,7 @@ BEGIN
         OR pg_catalog.has_function_privilege('authenticated', p.oid, 'EXECUTE')
       )
       AND cfg.setting LIKE 'search_path=%'
-      AND pg_catalog.btrim(pg_catalog.substring(cfg.setting FROM length('search_path=') + 1)) !~ '(^|,)\\s*pg_temp\\s*$'
+      AND pg_catalog.btrim(pg_catalog.substring(cfg.setting FROM length('search_path=') + 1)) !~ '(^|,)[[:space:]]*pg_temp[[:space:]]*$'
       AND NOT coalesce(p.proconfig, ARRAY[]::text[]) @> ARRAY['search_path=""']
   LOOP
     EXECUTE pg_catalog.format(
