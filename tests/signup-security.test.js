@@ -7,12 +7,12 @@ const config = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.
 const migration = readFileSync(new URL("../supabase/migrations/20261029040000_reject_disposable_signup_domains.sql", import.meta.url), "utf8");
 const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
 
-test("signup proxy is protected by Turnstile and rate limiting", () => {
+test("signup proxy forwards Turnstile to native Supabase CAPTCHA and rate limits by IP", () => {
   assert.match(worker, /async function protectedSignup\(/);
   assert.match(worker, /env\.SIGNUP_LIMITER/);
-  assert.match(worker, /env\.TURNSTILE_SECRET/);
-  assert.match(worker, /challenges\.cloudflare\.com\/turnstile\/v0\/siteverify/);
-  assert.match(worker, /verification\?\.success/);
+  assert.match(worker, /gotrue_meta_security:\{captcha_token:captchaToken\}/);
+  assert.doesNotMatch(worker, /env\.TURNSTILE_SECRET/);
+  assert.doesNotMatch(worker, /challenges\.cloudflare\.com\/turnstile\/v0\/siteverify/);
   assert.match(worker, /password\.length<12\|\|password\.length>128/);
   assert.match(config.ratelimits.find((item) => item.name === "SIGNUP_LIMITER")?.simple?.limit?.toString() || "", /5/);
 });
