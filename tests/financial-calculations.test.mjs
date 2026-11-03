@@ -47,6 +47,17 @@ test("sale-level discounts are allocated proportionally to item rows with exact 
   assert.equal(rows.reduce((sum, row) => sum + row.revenue_minor, 0), getSaleNetRevenueMinor(sale, items));
 });
 
+test("sale-level discounts are capped at net sale revenue and cannot create negative item revenue", () => {
+  const items = [
+    { id: "a", line_total_minor: 11900, tax_minor: 1900, discount_minor: 0 },
+    { id: "b", line_total_minor: 5950, tax_minor: 950, discount_minor: 0 }
+  ];
+  const rows = getSaleNetItemRevenueRows({ discount_minor: 50000 }, items);
+  assert.equal(rows.reduce((sum, row) => sum + row.revenue_minor, 0), 0);
+  assert.ok(rows.every((row) => row.revenue_minor >= 0));
+  assert.equal(getSaleNetRevenueMinor({ subtotal_minor: 15000, discount_minor: 50000 }), 0);
+});
+
 test("large discount allocations across many small lines never exceed the line base", () => {
   const items = Array.from({ length: 100 }, (_, index) => ({
     id: String(index), line_total_minor: 1, tax_minor: 0, discount_minor: 0
