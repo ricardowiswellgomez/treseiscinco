@@ -7,12 +7,12 @@ const config = JSON.parse(readFileSync(new URL("../wrangler.jsonc", import.meta.
 const migration = readFileSync(new URL("../supabase/migrations/20261029040000_reject_disposable_signup_domains.sql", import.meta.url), "utf8");
 const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
 
-test("signup proxy is protected by Turnstile and rate limiting", () => {
+test("signup proxy forwards Turnstile to native Supabase CAPTCHA and rate limits by IP", () => {
   assert.match(worker, /async function protectedSignup\(/);
   assert.match(worker, /env\.SIGNUP_LIMITER/);
-  assert.match(worker, /env\.TURNSTILE_SECRET/);
-  assert.match(worker, /challenges\.cloudflare\.com\/turnstile\/v0\/siteverify/);
-  assert.match(worker, /verification\?\.success/);
+  assert.match(worker, /gotrue_meta_security:\{captcha_token:captchaToken\}/);
+  assert.doesNotMatch(worker, /env\.TURNSTILE_SECRET/);
+  assert.doesNotMatch(worker, /challenges\.cloudflare\.com\/turnstile\/v0\/siteverify/);
   assert.match(worker, /password\.length<12\|\|password\.length>128/);
   assert.match(config.ratelimits.find((item) => item.name === "SIGNUP_LIMITER")?.simple?.limit?.toString() || "", /5/);
 });
@@ -25,9 +25,9 @@ test("temporary email providers are rejected at the server boundary", () => {
   assert.match(migration, /BEFORE INSERT OR UPDATE OF email ON auth\.users/);
 });
 
-test("the frontend intercepts the Auth signup request and requires a token", () => {
-  assert.match(worker, /treseiscinco-signup-security/);
-  assert.match(worker, /x-turnstile-token/);
-  assert.match(worker, /window\.__t365SignupCaptchaToken/);
+test("the frontend auth security bootstrap is served as a same-origin script", () => {
+  assert.ok(worker.includes("const signupSecurityScript="));
+  assert.ok(worker.includes("/_t365/signup-security.js"));
+  assert.ok(worker.includes('signupSecurityScript.replace("__TURNSTILE_SITEKEY__",TURNSTILE_SITEKEY)'));
   assert.match(app, /minLength=\{mode === "signup" \? 12 : 6\}/);
 });

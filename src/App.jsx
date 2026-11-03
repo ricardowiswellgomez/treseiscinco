@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { supabase, supabasePublishableKey } from "./lib/supabase.js";
+import { getSaleNetRevenueMinor, getSaleNetItemRevenueRows, getSaleCostMinor, isSaleIncludedInProfitability } from "./lib/financial-calculations.js";
 import { applyAppLanguage } from "./i18n.js";
 import { getSidebarItemLabel } from "./lib/sidebar-menu.js";
 
@@ -116,24 +117,78 @@ function buildHomeTrendData(period,range,sales,purchases,expenses) {
   return [...rows.values()];
 }
 function buildProfitabilityTrendData(sales,saleItems,expenses,period) {
-  const rowsByDate=new Map(),itemTotals=new Map();
-  for(const item of saleItems||[]){const value=itemTotals.get(item.sale_id)||{revenue:0,cost:0};value.revenue+=Number(item.line_total_minor)||0;value.cost+=Math.round((Number(item.unit_cost_minor)||0)*(Number(item.quantity)||0));itemTotals.set(item.sale_id,value);}
-  const records=[...(sales||[]).map((sale)=>({type:"sale",date:getDateKeyInBogota(sale.sold_at||sale.created_at),sale})),...(expenses||[]).map((expense)=>({type:"expense",date:getDateKeyInBogota(expense.expense_date),expense}))];
-  if(!records.length)return [];
-  const dates=records.map((record)=>record.date).sort(),minDate=new Date(dates[0]+"T12:00:00Z"),maxDate=new Date(dates[dates.length-1]+"T12:00:00Z");
-  const spanDays=Math.max(1,Math.round((maxDate-minDate)/86400000)+1),monthly=period==="all"||period==="year"||spanDays>62,hourly=period==="day",keys=[];
-  if(hourly){for(let hour=0;hour<24;hour++)keys.push("h:"+String(hour).padStart(2,"0"));}
-  else if(monthly){const cursor=new Date(Date.UTC(minDate.getUTCFullYear(),minDate.getUTCMonth(),1)),end=new Date(Date.UTC(maxDate.getUTCFullYear(),maxDate.getUTCMonth()+1,1));while(cursor<end&&keys.length<600){keys.push(cursor.getUTCFullYear()+"-"+String(cursor.getUTCMonth()+1).padStart(2,"0"));cursor.setUTCMonth(cursor.getUTCMonth()+1);}}
-  else{let date=dates[0],safe=0;while(date<=dates[dates.length-1]&&safe++<400){keys.push(date);date=shiftHomeDateKey(date,1);}}
-  const labelFor=(key)=>key.startsWith("h:")?key.slice(2)+":00":/^\d{4}-\d{2}$/.test(key)?new Date(key+"-01T12:00:00Z").toLocaleDateString("es-CO",{timeZone:"America/Bogota",month:"short"}):new Date(key+"T12:00:00Z").toLocaleDateString("es-CO",{timeZone:"America/Bogota",day:"2-digit",weekday:keys.length<=10?"short":undefined});
-  const bucketKey=(date,stamp,expense=false)=>hourly?"h:"+String(expense?12:getHourInBogota(stamp)).padStart(2,"0"):monthly?date.slice(0,7):date;
-  for(const key of keys)rowsByDate.set(key,{key,label:labelFor(key),revenue:0,cost:0,expenses:0,result:0});
-  for(const sale of sales||[]){const date=getDateKeyInBogota(sale.sold_at||sale.created_at),bucket=rowsByDate.get(bucketKey(date,sale.sold_at||sale.created_at));if(!bucket)continue;const totals=itemTotals.get(sale.id);if(totals){bucket.revenue+=totals.revenue;bucket.cost+=totals.cost;}else bucket.revenue+=Number(sale.total_minor)||0;}
-  for(const expense of expenses||[]){const date=getDateKeyInBogota(expense.expense_date),bucket=rowsByDate.get(bucketKey(date,expense.expense_date,true));if(bucket)bucket.expenses+=Number(expense.amount_minor)||0;}
-  for(const row of rowsByDate.values())row.result=row.revenue-row.cost-row.expenses;
+  const rowsByDate = new Map();
+  const itemsBySale = new Map();
+  for (const item of saleItems || []) {
+    const value = itemsBySale.get(item.sale_id) || { items: [], cost: 0 };
+    value.items.push(item);
+    value.cost += getSaleCostMinor([item]);
+    itemsBySale.set(item.sale_id, value);
+  }
+
+  const validSales = (sales || []).filter(isSaleIncludedInProfitability);
+  const records = [
+    ...validSales.map((sale) => ({ type: "sale", date: getDateKeyInBogota(sale.sold_at || sale.created_at), sale })),
+    ...(expenses || []).map((expense) => ({ type: "expense", date: getDateKeyInBogota(expense.expense_date), expense }))
+  ];
+  if (!records.length) return [];
+
+  const dates = records.map((record) => record.date).sort();
+  const minDate = new Date(dates[0] + "T12:00:00Z");
+  const maxDate = new Date(dates[dates.length - 1] + "T12:00:00Z");
+  const spanDays = Math.max(1, Math.round((maxDate - minDate) / 86400000) + 1);
+  const monthly = period === "all" || period === "year" || spanDays > 62;
+  const hourly = period === "day";
+  const keys = [];
+
+  if (hourly) {
+    for (let hour = 0; hour < 24; hour++) keys.push("h:" + String(hour).padStart(2, "0"));
+  } else if (monthly) {
+    const cursor = new Date(Date.UTC(minDate.getUTCFullYear(), minDate.getUTCMonth(), 1));
+    const end = new Date(Date.UTC(maxDate.getUTCFullYear(), maxDate.getUTCMonth() + 1, 1));
+    while (cursor < end && keys.length < 600) {
+      keys.push(cursor.getUTCFullYear() + "-" + String(cursor.getUTCMonth() + 1).padStart(2, "0"));
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+    }
+  } else {
+    let date = dates[0];
+    let safe = 0;
+    while (date <= dates[dates.length - 1] && safe++ < 400) {
+      keys.push(date);
+      date = shiftHomeDateKey(date, 1);
+    }
+  }
+
+  const labelFor = (key) => key.startsWith("h:")
+    ? key.slice(2) + ":00"
+    : /^\d{4}-\d{2}$/.test(key)
+      ? new Date(key + "-01T12:00:00Z").toLocaleDateString("es-CO", { timeZone: "America/Bogota", month: "short" })
+      : new Date(key + "T12:00:00Z").toLocaleDateString("es-CO", { timeZone: "America/Bogota", day: "2-digit", weekday: keys.length <= 10 ? "short" : undefined });
+
+  const bucketKey = (date, stamp, expense = false) => hourly
+    ? "h:" + String(expense ? 12 : getHourInBogota(stamp)).padStart(2, "0")
+    : monthly ? date.slice(0, 7) : date;
+
+  for (const key of keys) rowsByDate.set(key, { key, label: labelFor(key), revenue: 0, cost: 0, expenses: 0, result: 0 });
+
+  for (const sale of validSales) {
+    const date = getDateKeyInBogota(sale.sold_at || sale.created_at);
+    const bucket = rowsByDate.get(bucketKey(date, sale.sold_at || sale.created_at));
+    if (!bucket) continue;
+    const itemData = itemsBySale.get(sale.id);
+    bucket.revenue += getSaleNetRevenueMinor(sale, itemData?.items || []);
+    bucket.cost += itemData?.cost || 0;
+  }
+
+  for (const expense of expenses || []) {
+    const date = getDateKeyInBogota(expense.expense_date);
+    const bucket = rowsByDate.get(bucketKey(date, expense.expense_date, true));
+    if (bucket) bucket.expenses += Number(expense.amount_minor) || 0;
+  }
+
+  for (const row of rowsByDate.values()) row.result = row.revenue - row.cost - row.expenses;
   return [...rowsByDate.values()];
 }
-
 
 function SimpleBars({ title, description, data, formatValue, badge = "7 días", footnote = "Valores calculados a partir de movimientos registrados, no de estimaciones.", colors }) {
   const maxValue = Math.max(1,...(data||[]).map((item)=>Math.abs(Number(item.value)||0)));
@@ -1533,7 +1588,7 @@ function PublicCatalog({ businessId }) {
           <button type="button" className="secondary-button" onClick={refreshReturnedOrder} disabled={orderStatusLoading}>{orderStatusLoading ? "Consultando…" : "Actualizar estado"}</button>
         </div>}
         <div className="public-catalog-filters" aria-label="Buscar y ordenar productos">
-          <label className="public-catalog-search"><span><AppIcon name="search" size={16}/> Buscar productos</span><input value={catalogSearchText} onChange={(event) => { setCatalogSearchText(event.target.value); setPage(0); }} maxLength={100} placeholder="Nombre, descripción o código…" /></label>
+          <label className="public-catalog-search"><span><AppIcon name="search" size={16}/> Buscar productos</span><input value={catalogSearchText} onChange={(event) => { setCatalogSearchText(event.target.value); setPage(0); }} maxLength={100} placeholder="Nombre o descripción…" /></label>
           <label><span>Categoría</span><select value={catalogCategoryFilter} onChange={(event) => { setCatalogCategoryFilter(event.target.value); setPage(0); }}><option value="all">Todas las categorías</option>{catalogCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
           <label><span>Ordenar por</span><select value={catalogPublicSort} onChange={(event) => { setCatalogPublicSort(event.target.value); setPage(0); }}><option value="name_asc">Nombre: A → Z</option><option value="name_desc">Nombre: Z → A</option><option value="price_asc">Precio: menor a mayor</option><option value="price_desc">Precio: mayor a menor</option></select></label>
         </div>
@@ -3948,7 +4003,8 @@ function AuthenticatedApp() {
       const svg = buildBusinessCardSvg(profile, businessName, logoDataUri);
       // Render the vector artwork inline in the print document. This preserves the chosen
       // background rectangle and explicit text fills in Chrome/Edge's print pipeline.
-      const html = '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tarjeta · ' + escapeHtml(businessName) + '</title><style>*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;forced-color-adjust:none!important;box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;font-family:Arial,sans-serif}body{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px}.card-svg{display:block;width:90mm;height:50mm;max-width:100%;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.card-svg svg{display:block;width:90mm;height:50mm;max-width:100%;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.print-hint{font-size:12px;color:#555;text-align:center;padding:0 12px}@media print{@page{size:90mm 50mm;margin:0}body{min-height:0;display:block}.card-svg,.card-svg svg{width:90mm;height:50mm;max-width:none}.print-hint{display:none}}</style></head><body><div class="card-svg" aria-label="Tarjeta comercial con colores personalizados">' + svg + '</div><p class="print-hint">Elige «Guardar como PDF» para conservar el formato de 9 × 5 cm. El fondo y los textos usan los colores seleccionados.</p><script>window.addEventListener("load",()=>setTimeout(()=>window.print(),350));</script></body></html>';
+      const html = '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tarjeta · ' + escapeHtml(businessName) + '</title><style>*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;forced-color-adjust:none!important;box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;font-family:Arial,sans-serif}body{min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px}.card-svg{display:block;width:90mm;height:50mm;max-width:100%;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.card-svg svg{display:block;width:90mm;height:50mm;max-width:100%;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}.print-hint{font-size:12px;color:#555;text-align:center;padding:0 12px}@media print{@page{size:90mm 50mm;margin:0}body{min-height:0;display:block}.card-svg,.card-svg svg{width:90mm;height:50mm;max-width:none}.print-hint{display:none}}</style></head><body><div class="card-svg" aria-label="Tarjeta comercial con colores personalizados">' + svg + '</div><p class="print-hint">Elige «Guardar como PDF» para conservar el formato de 9 × 5 cm. El fondo y los textos usan los colores seleccionados.</p></body></html>';
+      printWindow.addEventListener("load", () => setTimeout(() => { printWindow.focus(); printWindow.print(); }, 350), { once: true });
       printWindow.document.open();
       printWindow.document.write(html);
       printWindow.document.close();
@@ -3965,7 +4021,7 @@ function AuthenticatedApp() {
       const tableNames=[
         "product_categories","products","product_images","product_variants","customers","suppliers",
         "sales","sale_items","sale_payments","purchases","purchase_items","purchase_payments",
-        "expenses","bank_accounts","bank_movements","stock_movements","audit_logs","quotes","quote_items","business_coupons"
+        "expenses","bank_accounts","bank_movements","stock_movements","cash_register_sessions","audit_logs","quotes","quote_items","business_coupons"
       ];
       const backup={format:"treseiscinco-business-backup-v1",generated_at:new Date().toISOString(),
         business:{id:activeBusiness.id,name:activeBusiness.name,currency_code:activeBusiness.currency_code,
@@ -4414,7 +4470,7 @@ function AuthenticatedApp() {
 
   async function submitAuth(event) {
     event.preventDefault();
-    if (mode === "signup" && (password.length < 12 || password.length > 128)) { setBusy(false); setError("La contraseña de una cuenta nueva debe tener entre 12 y 128 caracteres."); setNotice(""); return; }
+    if ((mode === "signup" || mode === "update-password") && (password.length < 12 || password.length > 128)) { setBusy(false); setError("La contraseña nueva debe tener entre 12 y 128 caracteres."); setNotice(""); return; }
     setBusy(true); setError(""); setNotice("");
     try {
       if (mode === "forgot") {
@@ -5386,13 +5442,18 @@ function AuthenticatedApp() {
     if (!Number.isSafeInteger(opening) || opening < 0) { setError("Escribe un monto inicial de caja válido."); return; }
     setCashRegisterSaving(true); setError(""); setNotice("");
     try {
-      const { data, error: insertError } = await supabase.from("cash_register_sessions")
-        .insert({business_id:activeBusiness.id,opened_by:session.user.id,currency_code:currencyCode,opening_cash_minor:opening})
-        .select("id,business_id,opened_by,closed_by,currency_code,opening_cash_minor,closing_cash_minor,expected_cash_minor,difference_minor,close_notes,status,opened_at,closed_at").single();
-      if (insertError) throw insertError;
-      setCashRegisterSession(data);
+      const { data, error: openError } = await supabase.rpc("open_cash_register_session", {
+        p_business_id: activeBusiness.id,
+        p_opening_cash_minor: opening
+      });
+      if (openError) throw openError;
+      const openedSession = data?.session || data;
+      if (!openedSession?.id || openedSession.status !== "open") {
+        throw new Error("El servidor no confirmó la apertura de la caja. Actualiza la pantalla antes de volver a intentarlo.");
+      }
+      setCashRegisterSession(openedSession);
       setCashRegisterOpenAmount("0");
-      setNotice("Caja abierta. Los cobros en efectivo de este turno quedarán asociados a tu usuario.");
+      setNotice("Caja abierta. El servidor registrará los movimientos de efectivo asociados a tu usuario.");
     } catch (error) { setError(friendlyError(error)); }
     finally { setCashRegisterSaving(false); }
   }
@@ -5405,31 +5466,35 @@ function AuthenticatedApp() {
     if (!Number.isSafeInteger(closing) || closing < 0) { setError("Escribe el efectivo contado al cerrar la caja."); return; }
     setCashRegisterSaving(true); setError(""); setNotice("");
     try {
-      const [{data:payments,error:paymentsError},{data:expenses,error:expensesError}] = await Promise.all([
-        supabase.from("sale_payments").select("amount_minor,payment_method,paid_at")
-          .eq("business_id",activeBusiness.id).eq("created_by",session.user.id)
-          .eq("payment_method","Efectivo").gte("paid_at",register.opened_at).lte("paid_at",new Date().toISOString()),
-        supabase.from("expenses").select("amount_minor,payment_method,created_at")
-          .eq("business_id",activeBusiness.id).eq("created_by",session.user.id)
-          .eq("payment_method","Efectivo").gte("created_at",register.opened_at).lte("created_at",new Date().toISOString())
-      ]);
-      if (paymentsError) throw paymentsError;
-      if (expensesError) throw expensesError;
-      const received=(payments||[]).reduce((sum,row)=>sum+Number(row.amount_minor||0),0);
-      const expenseTotal=(expenses||[]).reduce((sum,row)=>sum+Number(row.amount_minor||0),0);
-      const expected=Number(register.opening_cash_minor||0)+received-expenseTotal;
-      const {data,error:updateError}=await supabase.from("cash_register_sessions").update({
-        closed_by:session.user.id,closed_at:new Date().toISOString(),status:"closed",
-        closing_cash_minor:closing,expected_cash_minor:expected,difference_minor:closing-expected,
-        close_notes:cashRegisterCloseNotes.trim()||null,updated_at:new Date().toISOString()
-      }).eq("business_id",activeBusiness.id).eq("id",register.id).eq("status","open")
-        .select("id").maybeSingle();
-      if (updateError) throw updateError;
-      if (!data) throw new Error("La caja ya se cerró o no tienes permiso para modificarla.");
-      setCashRegisterSummary({received,expenses:expenseTotal,expected,count:(payments||[]).length});
+      const { data, error: closeError } = await supabase.rpc("close_cash_register_session", {
+        p_business_id: activeBusiness.id,
+        p_session_id: register.id,
+        p_closing_cash_minor: closing,
+        p_close_notes: cashRegisterCloseNotes.trim() || null
+      });
+      if (closeError) throw closeError;
+      if (!data?.session || data.session.status !== "closed") {
+        throw new Error("El servidor no confirmó el cierre. La caja puede seguir abierta; actualiza la pantalla antes de volver a intentarlo.");
+      }
+      const received = Number(data.cash_received_minor || 0);
+      const purchaseTotal = Number(data.cash_paid_purchases_minor || 0);
+      const expenseTotal = Number(data.cash_paid_expenses_minor || 0);
+      const expected = Number(data.expected_cash_minor || 0);
+      const difference = Number(data.difference_minor ?? (closing - expected));
+      setCashRegisterSummary({
+        received,
+        purchases: purchaseTotal,
+        expenses: expenseTotal,
+        expected,
+        count: Number(data.cash_received_count || 0)
+      });
       setCashRegisterSession(null);
       setCashRegisterCloseAmount(""); setCashRegisterCloseNotes("");
-      setNotice("Caja cerrada. Efectivo esperado: " + money(expected,currencyCode) + "; diferencia: " + money(closing-expected,currencyCode) + ".");
+      setNotice(
+        "Caja cerrada. Efectivo esperado: " + money(expected, currencyCode) +
+        "; diferencia: " + money(difference, currencyCode) +
+        ". Compras en efectivo: " + money(purchaseTotal, currencyCode) + "."
+      );
     } catch (error) { setError(friendlyError(error)); }
     finally { setCashRegisterSaving(false); }
   }
@@ -5978,7 +6043,7 @@ function AuthenticatedApp() {
     try {
       const [sales, expenses, purchasePayments] = await Promise.all([
         fetchAllProfitabilityRows(
-          () => supabase.from("sales").select("id,business_id,status,currency_code,total_minor,amount_paid_minor,sold_at,created_at")
+          () => supabase.from("sales").select("id,business_id,status,currency_code,subtotal_minor,discount_minor,tax_minor,total_minor,amount_paid_minor,sold_at,created_at")
             .eq("business_id", activeBusiness.id).order("sold_at", { ascending: false }).order("id", { ascending: true }),
           "ventas"
         ),
@@ -6000,7 +6065,7 @@ function AuthenticatedApp() {
           const ids = sales.slice(index, index + batchSize).map((sale) => sale.id);
           const rows = await fetchAllProfitabilityRows(
             () => supabase.from("sale_items")
-              .select("id,sale_id,product_id,item_name,quantity,unit_cost_minor,line_total_minor")
+              .select("id,sale_id,product_id,item_name,quantity,unit_cost_minor,discount_minor,tax_minor,line_total_minor")
               .eq("business_id", activeBusiness.id).in("sale_id", ids).order("created_at").order("id", { ascending: true }),
             "líneas de venta"
           );
@@ -6344,10 +6409,11 @@ function AuthenticatedApp() {
       <table><thead><tr><th>Artículo / servicio</th><th class="num">Cantidad</th><th class="num">Precio unitario</th><th class="num">Total</th></tr></thead><tbody>${items}</tbody></table>
       <div class="summary">${summaryRows}</div>
       ${quote.notes ? "<div class=\"notes\"><strong>Notas y condiciones</strong><p>" + escapeHtml(quote.notes) + "</p></div>" : ""}<div class="footer">Cotización comercial generada desde treseiscinco · ${escapeHtml(brand)}. Este documento es una propuesta comercial, no una factura ni comprobante de pago.</div>
-      <script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print()},350)})<\\/script></body></html>`;
+      <\\/script></body></html>`;
     const win = window.open(window.location.href, "_blank", "width=900,height=900");
     if (!win) { setError("Permite las ventanas emergentes para abrir la cotización e imprimirla o guardarla como PDF."); return; }
     try { win.opener = null; } catch { /* La impresión no depende de window.opener. */ }
+    win.addEventListener("load", () => setTimeout(() => { win.focus(); win.print(); }, 350), { once: true });
     win.document.open(); win.document.write(html); win.document.close();
   }
 
@@ -6575,10 +6641,11 @@ function AuthenticatedApp() {
       <div class="summary"><div><span>Total</span><strong>${escapeHtml(money(total, sale.currency_code || currencyCode))}</strong></div><div><span>Pagado</span><strong>${escapeHtml(money(paid, sale.currency_code || currencyCode))}</strong></div><div class="balance"><span>Saldo pendiente</span><strong>${escapeHtml(money(outstanding, sale.currency_code || currencyCode))}</strong></div></div>
       ${paymentRows ? "<h3>Historial de pagos</h3><table><thead><tr><th>Fecha</th><th>Medio de pago</th><th class=\"num\">Importe</th></tr></thead><tbody>" + paymentRows + "</tbody></table>" : ""}
       ${sale.notes ? "<p style=\"margin-top:24px\"><strong>Notas:</strong> " + escapeHtml(sale.notes) + "</p>" : ""}<div class="footer">Documento comercial generado desde treseiscinco · ${escapeHtml(brand)}</div>
-      <script>window.addEventListener("load",function(){setTimeout(function(){window.focus();window.print()},350)})<\/script></body></html>`;
+      <\/script></body></html>`;
     const win = window.open(window.location.href, "_blank", "width=900,height=900");
     if (!win) { setError("Permite las ventanas emergentes para abrir el documento e imprimirlo o guardarlo como PDF."); return; }
     try { win.opener = null; } catch { /* La impresión no depende de window.opener. */ }
+    win.addEventListener("load", () => setTimeout(() => { win.focus(); win.print(); }, 350), { once: true });
     win.document.open(); win.document.write(html); win.document.close();
   }
 
@@ -7188,7 +7255,7 @@ function AuthenticatedApp() {
     const now = new Date(todayBogotaKey + "T12:00:00-05:00").getTime();
     return day >= now - 30 * 24 * 60 * 60 * 1000 && day <= now + 24 * 60 * 60 * 1000;
   };
-  const periodSales = profitabilitySales.filter((sale) => !["canceled", "refunded"].includes(sale.status) && profitInPeriod(sale.sold_at || sale.created_at));
+  const periodSales = profitabilitySales.filter((sale) => isSaleIncludedInProfitability(sale) && profitInPeriod(sale.sold_at || sale.created_at));
   const periodSaleIds = new Set(periodSales.map((sale) => sale.id));
   const periodSaleItems = profitabilitySaleItems.filter((item) => periodSaleIds.has(item.sale_id));
   const periodExpenses = profitabilityExpenses.filter((expense) => profitInPeriod(expense.expense_date));
@@ -7283,7 +7350,7 @@ function AuthenticatedApp() {
       ["Ingresos", statsCollected / unit],
       ["Gastos", statsExpensesTotal / unit],
       ["Compras pagadas", statsPaidPurchases / unit],
-      ["Balance", statsCashBalance / unit],
+      ["Flujo neto del periodo", statsCashBalance / unit],
       ["Ventas registradas", statsSalesTotal / unit],
       ["Pendiente por cobrar", statsOutstanding / unit],
       [],
@@ -7320,7 +7387,16 @@ function AuthenticatedApp() {
   const profitSalesTotal = periodSales.reduce((sum, sale) => sum + Number(sale.total_minor || 0), 0);
   const profitPaidTotal = periodSales.reduce((sum, sale) => sum + Number(sale.amount_paid_minor || 0), 0);
   const profitCostOfSales = periodSaleItems.reduce((sum, item) => sum + Math.round(Number(item.unit_cost_minor || 0) * Number(item.quantity || 0)), 0);
-  const profitLineRevenue = periodSaleItems.reduce((sum, item) => sum + Number(item.line_total_minor || 0), 0);
+  const profitabilityItemsBySale = periodSaleItems.reduce((groups, item) => {
+    if (!groups.has(item.sale_id)) groups.set(item.sale_id, []);
+    groups.get(item.sale_id).push(item);
+    return groups;
+  }, new Map());
+  const profitNetItemRows = periodSales.flatMap((sale) =>
+    getSaleNetItemRevenueRows(sale, profitabilityItemsBySale.get(sale.id) || [])
+      .map(({ item, revenue_minor }) => ({ ...item, net_revenue_minor: revenue_minor }))
+  );
+  const profitLineRevenue = profitNetItemRows.reduce((sum, item) => sum + item.net_revenue_minor, 0);
   const profitGross = profitLineRevenue - profitCostOfSales;
   const profitExpenseTotal = periodExpenses.reduce((sum, expense) => sum + Number(expense.amount_minor || 0), 0);
   const profitNet = profitGross - profitExpenseTotal;
@@ -7331,11 +7407,11 @@ function AuthenticatedApp() {
     groups[category].count += 1;
     return groups;
   }, {})).sort((a, b) => b.amount - a.amount);
-  const profitByItem = Object.values(periodSaleItems.reduce((groups, item) => {
+  const profitByItem = Object.values(profitNetItemRows.reduce((groups, item) => {
     const name = item.item_name || "Artículo sin nombre";
     if (!groups[name]) groups[name] = { name, quantity: 0, revenue: 0, cost: 0 };
     groups[name].quantity += Number(item.quantity || 0);
-    groups[name].revenue += Number(item.line_total_minor || 0);
+    groups[name].revenue += Number(item.net_revenue_minor || 0);
     groups[name].cost += Math.round(Number(item.unit_cost_minor || 0) * Number(item.quantity || 0));
     return groups;
   }, {})).sort((a, b) => (b.revenue - b.cost) - (a.revenue - a.cost));
@@ -7853,13 +7929,13 @@ function AuthenticatedApp() {
             <div className="products-intro"><div><p className="eyebrow">CONTROL INTERNO</p><h2>Administración de plataforma</h2><p>Usuarios, actividad, pruebas de 30 días, pagos e historial. Los cobros recurrentes se conectarán después.</p></div><button type="button" className="secondary-button" onClick={loadPlatformAdminDashboard} disabled={platformAdminLoading}>Actualizar</button></div>
             {!isPlatformAdmin?<div className="empty-state"><h3>Acceso restringido</h3><p>Este panel se valida también en el servidor.</p></div>:platformAdminLoading&&!platformAdminData?<div className="empty-state">Cargando estadísticas…</div>:<>
               <div className="platform-admin-metrics">
-                {[[ "Empresas registradas",platformAdminData?.summary?.businesses ],["Usuarios registrados",platformAdminData?.summary?.total_users ],["Activos hoy",platformAdminData?.summary?.active_today],["Activos en 7 días",platformAdminData?.summary?.active_7d],["Activos en 30 días",platformAdminData?.summary?.active_30d],["PWA detectadas",platformAdminData?.summary?.installed_users],["Pruebas activas",platformAdminData?.summary?.trials_live],["Suscripciones activas",platformAdminData?.summary?.subscribers_active]].map(([label,value])=><article key={label} className="platform-admin-metric panel"><span>{label}</span><strong>{Number(value||0).toLocaleString("es-CO")}</strong></article>)}
+                {[[ "Empresas registradas",platformAdminData?.summary?.businesses ],["Usuarios registrados",platformAdminData?.summary?.total_users ],["Activos hoy",platformAdminData?.summary?.active_today],["Activos en 7 días",platformAdminData?.summary?.active_7d],["Activos en 30 días",platformAdminData?.summary?.active_30d],["PWA reportadas",platformAdminData?.summary?.installed_users],["Pruebas activas",platformAdminData?.summary?.trials_live],["Suscripciones activas",platformAdminData?.summary?.subscribers_active]].map(([label,value])=><article key={label} className="platform-admin-metric panel"><span>{label}</span><strong>{Number(value||0).toLocaleString("es-CO")}</strong></article>)}
                 <article className="platform-admin-metric panel"><span>Pagos confirmados este mes</span><strong>{money(platformAdminData?.summary?.collected_month||0,"COP")}</strong></article>
               </div>
               <div className="platform-admin-controls"><label><span>Buscar negocio o correo</span><input value={platformAdminSearch} onChange={e=>setPlatformAdminSearch(e.target.value)} placeholder="Nombre o correo"/></label><label><span>Motivo de la acción</span><input value={platformAdminNote} onChange={e=>setPlatformAdminNote(e.target.value)} maxLength={2000} placeholder="Nota interna opcional"/></label></div>
               <div className="platform-admin-business-list">{(platformAdminData?.subscriptions||[]).filter(x=>!platformAdminSearch.trim()||[x.business_name,x.owner_email].filter(Boolean).join(" ").toLocaleLowerCase("es").includes(platformAdminSearch.trim().toLocaleLowerCase("es"))).map(x=>{const labels={trialing:"En prueba",active:"Activa",past_due:"Pago pendiente",canceled:"Cancelada",expired:"Vencida",paused:"Pausada"};return <article className="platform-business-card panel" key={x.subscription_id}>
                 <div className="platform-business-heading"><div><span>{x.owner_email}</span><h3>{x.business_name}</h3><small>Creado: {x.business_created_at?new Date(x.business_created_at).toLocaleDateString("es-CO",{timeZone:"America/Bogota"}):"—"} · Última actividad: {x.last_seen_at?new Date(x.last_seen_at).toLocaleString("es-CO",{timeZone:"America/Bogota",dateStyle:"medium",timeStyle:"short"}):"Sin datos"}</small></div><span className={"status-pill "+(x.status==="active"?"status-active":x.status==="trialing"?"status-unpublished":"status-inactive")}>{labels[x.status]||x.status}</span></div>
-                <div className="platform-business-facts"><div><span>Inicio</span><strong>{x.current_period_start?new Date(x.current_period_start).toLocaleDateString("es-CO",{timeZone:"America/Bogota"}):"—"}</strong></div><div><span>Vence</span><strong>{x.current_period_end?new Date(x.current_period_end).toLocaleDateString("es-CO",{timeZone:"America/Bogota"}):"—"}</strong></div><div><span>Días restantes</span><strong>{x.current_period_end?x.days_remaining+" días":"—"}</strong></div><div><span>Total recibido</span><strong>{money(x.total_paid_minor||0,"COP")}</strong></div><div><span>Instalación</span><strong>{x.is_installed?"Detectada":"No detectada"}</strong></div></div>
+                <div className="platform-business-facts"><div><span>Inicio</span><strong>{x.current_period_start?new Date(x.current_period_start).toLocaleDateString("es-CO",{timeZone:"America/Bogota"}):"—"}</strong></div><div><span>Vence</span><strong>{x.current_period_end?new Date(x.current_period_end).toLocaleDateString("es-CO",{timeZone:"America/Bogota"}):"—"}</strong></div><div><span>Días restantes</span><strong>{x.current_period_end?x.days_remaining+" días":"—"}</strong></div><div><span>Total recibido</span><strong>{money(x.total_paid_minor||0,"COP")}</strong></div><div><span>Reporte de instalación</span><strong>{x.is_installed?"Reportada":"Sin reporte"}</strong></div></div>
                 <div className="platform-subscription-editor"><label><span>Estado</span><select value={platformAdminStatusDrafts[x.subscription_id]||x.status} onChange={e=>setPlatformAdminStatusDrafts(v=>({...v,[x.subscription_id]:e.target.value}))}><option value="trialing">En prueba</option><option value="active">Activa</option><option value="past_due">Pago pendiente</option><option value="paused">Pausada</option><option value="canceled">Cancelada</option><option value="expired">Vencida</option></select></label><label><span>Fin del periodo</span><input type="datetime-local" value={platformAdminPeriodDrafts[x.subscription_id]??""} onChange={e=>setPlatformAdminPeriodDrafts(v=>({...v,[x.subscription_id]:e.target.value}))}/></label><button type="button" className="secondary-button action-small" disabled={platformAdminSaving} onClick={()=>updatePlatformSubscription(x)}>Guardar cambios</button><button type="button" className="secondary-button action-small" disabled={platformAdminSaving} onClick={()=>updatePlatformSubscription(x,"trialing",7)}>Extender prueba 7 días</button></div>
                 <button type="button" className="primary-button compact-button" onClick={()=>{setPlatformPaymentBusiness(v=>v===x.business_id?"":x.business_id);setPlatformPaymentDraft({interval:"month",amount:"",method:"Nequi",reference:"",notes:""});}}>＋ Registrar pago</button>
                 {platformPaymentBusiness===x.business_id&&<form className="platform-payment-form" onSubmit={e=>submitPlatformPayment(e,x)}><h4>Confirmar pago recibido</h4><p>Confirma solo después de verificar el ingreso en Nequi o tu cuenta bancaria.</p><div className="platform-payment-grid"><label><span>Periodo</span><select value={platformPaymentDraft.interval} onChange={e=>setPlatformPaymentDraft(v=>({...v,interval:e.target.value}))}><option value="month">Mensual</option><option value="quarter">Trimestral</option><option value="year">Anual</option></select></label><label><span>Valor (COP)</span><input type="number" min="1" value={platformPaymentDraft.amount} onChange={e=>setPlatformPaymentDraft(v=>({...v,amount:e.target.value}))} required/></label><label><span>Medio</span><select value={platformPaymentDraft.method} onChange={e=>setPlatformPaymentDraft(v=>({...v,method:e.target.value}))}><option>Nequi</option><option>Transferencia bancaria</option><option>Efectivo</option><option>Wompi manual</option><option>Tarjeta manual</option><option>Otro</option></select></label><label><span>Referencia única{["Nequi","Transferencia bancaria","Wompi manual","Tarjeta manual"].includes(platformPaymentDraft.method)?" *":""}</span><input value={platformPaymentDraft.reference} onChange={e=>setPlatformPaymentDraft(v=>({...v,reference:e.target.value}))} maxLength={180} required={["Nequi","Transferencia bancaria","Wompi manual","Tarjeta manual"].includes(platformPaymentDraft.method)}/></label><label><span>Notas</span><input value={platformPaymentDraft.notes} onChange={e=>setPlatformPaymentDraft(v=>({...v,notes:e.target.value}))} maxLength={2000}/></label></div><div className="form-actions"><button type="button" className="secondary-button" onClick={()=>setPlatformPaymentBusiness("")}>Cancelar</button><button type="submit" className="primary-button" disabled={platformAdminSaving}>Confirmar y activar</button></div></form>}
@@ -8310,7 +8386,7 @@ function AuthenticatedApp() {
                 <article className="stats-metric panel stats-income"><span>Ingresos</span><strong>{money(statsCollected, currencyCode)}</strong><small>Pagos recibidos en el periodo</small></article>
                 <article className="stats-metric panel"><span>Gastos</span><strong>{money(statsExpensesTotal, currencyCode)}</strong><small>{statsPeriodExpenses.length} {statsPeriodExpenses.length === 1 ? "gasto registrado" : "gastos registrados"}</small></article>
                 <article className="stats-metric panel"><span>Compras pagadas</span><strong>{money(statsPaidPurchases, currencyCode)}</strong><small>Pagos de compras del periodo</small></article>
-                <article className={"stats-metric panel stats-balance" + (statsCashBalance < 0 ? " profit-negative" : " profit-positive")}><span>Balance</span><strong>{money(statsCashBalance, currencyCode)}</strong><small>Ingresos − gastos − compras pagadas</small></article>
+                <article className={"stats-metric panel stats-balance" + (statsCashBalance < 0 ? " profit-negative" : " profit-positive")}><span>Flujo neto del periodo</span><strong>{money(statsCashBalance, currencyCode)}</strong><small>Entradas cobradas − gastos − pagos de compras. No representa el saldo bancario actual.</small></article>
               </div>
               <div className="chart-type-picker" role="group" aria-label="Tipo de gráfico"><button type="button" className={statsChartType === "bars" ? "active" : ""} aria-pressed={statsChartType === "bars"} onClick={() => setStatsChartType("bars")}>Barras</button><button type="button" className={statsChartType === "pie" ? "active" : ""} aria-pressed={statsChartType === "pie"} onClick={() => setStatsChartType("pie")}>Pastel</button><button type="button" className={statsChartType === "area" ? "active" : ""} aria-pressed={statsChartType === "area"} onClick={() => setStatsChartType("area")}>Área</button></div>{statsChartType === "bars" ? <SimpleBars title="Balance diario" description="Diferencia entre pagos recibidos y salidas registradas durante los últimos siete días." data={balanceChartData.map((item)=>({key:item.key,label:item.label,value:item.value}))} formatValue={(value)=>money(value,currencyCode)} /> : statsChartType === "pie" ? <SimplePie title="Distribución del balance" description="Comparación de ingresos y salidas en el periodo seleccionado." data={[{label:"Ingresos",value:statsCollected},{label:"Gastos",value:statsExpensesTotal},{label:"Compras pagadas",value:statsPaidPurchases}]} formatValue={(value)=>money(value,currencyCode)} /> : <SimpleArea title="Evolución del balance" description="Pagos recibidos y salidas por día de los últimos siete días." badge="7 días" data={balanceChartData.map((item)=>({key:item.key,label:item.label,value:item.value}))} series={[{key:"value",label:"Balance",color:"#2563EB"}]} formatValue={(value)=>money(value,currencyCode)} />}
               <section className="stats-insight-section">
@@ -8421,11 +8497,11 @@ function AuthenticatedApp() {
               <div className="profitability-breakdowns">
                 <section className="profit-breakdown panel">
                   <div className="profit-breakdown-heading"><div><h3>Costos por artículo vendido</h3><p>Lo que costaron los artículos que ya vendiste.</p></div></div>
-                  {periodSaleItems.length ? <div className="profit-data-list">{Object.values(periodSaleItems.reduce((groups, item) => {
+                  {profitNetItemRows.length ? <div className="profit-data-list">{Object.values(profitNetItemRows.reduce((groups, item) => {
                     const name = item.item_name || "Artículo sin nombre";
                     if (!groups[name]) groups[name] = { name, quantity: 0, revenue: 0, cost: 0 };
                     groups[name].quantity += Number(item.quantity || 0);
-                    groups[name].revenue += Number(item.line_total_minor || 0);
+                    groups[name].revenue += Number(item.net_revenue_minor || 0);
                     groups[name].cost += Math.round(Number(item.unit_cost_minor || 0) * Number(item.quantity || 0));
                     return groups;
                   }, {})).sort((a, b) => (b.revenue - b.cost) - (a.revenue - a.cost)).slice(0, 12).map((item) => <div className="profit-data-row" key={item.name}>
@@ -9060,7 +9136,7 @@ function AuthenticatedApp() {
                 <div className="settings-icon"><AppIcon name="settings" size={23}/></div>
                 <h3>Copias de seguridad</h3>
                 <p>Descarga una copia de los registros accesibles de este negocio. El archivo incluye las filas que tus permisos permiten consultar y señala cualquier tabla que no se haya podido exportar.</p>
-                <div className="settings-data-card"><div><strong>Copia de seguridad del negocio</strong><p>Productos, categorías, clientes, proveedores, ventas, pagos, compras, gastos, movimientos, cotizaciones, cupones y auditoría cuando los permisos lo permitan.</p></div><button type="button" className="primary-button" onClick={downloadBusinessBackup} disabled={backupBusy||!activeBusiness?.id||activeBusiness?.role!=="owner"}>{backupBusy?"Preparando copia…":"Descargar copia"}</button></div>
+                <div className="settings-data-card"><div><strong>Copia de seguridad del negocio</strong><p>Productos, categorías, clientes, proveedores, ventas, pagos, compras, gastos, cajas, movimientos, cotizaciones, cupones y auditoría cuando los permisos lo permitan.</p></div><button type="button" className="primary-button" onClick={downloadBusinessBackup} disabled={backupBusy||!activeBusiness?.id||activeBusiness?.role!=="owner"}>{backupBusy?"Preparando copia…":"Descargar copia"}</button></div>
                 {activeBusiness?.role!=="owner"&&<p className="helper-text">Solo el propietario puede descargar una copia completa del negocio.</p>}
                 <div className="tax-guidance-note"><strong>Importante</strong><p>La descarga no incluye contraseñas, credenciales privadas de pasarelas ni cuentas de acceso. Guarda el archivo en un lugar seguro; contiene información comercial y datos de clientes.</p></div>
               </div>

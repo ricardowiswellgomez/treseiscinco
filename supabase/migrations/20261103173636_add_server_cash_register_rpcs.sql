@@ -1,0 +1,385 @@
+-- Add trusted server-side cash register operations.
+-- Supporting indexes for one-user cash sessions and cash-only close aggregation.
+-- Enforce one open drawer per user and business, including legacy/direct writers.
+CREATE UNIQUE INDEX IF NOT EXISTS cash_register_sessions_one_open_per_user_idx
+  ON public.cash_register_sessions (business_id, opened_by)
+  WHERE status = 'open';
+CREATE INDEX IF NOT EXISTS cash_register_sessions_opened_by_idx
+  ON public.cash_register_sessions (opened_by);
+CREATE INDEX IF NOT EXISTS cash_register_sessions_closed_by_idx
+  ON public.cash_register_sessions (closed_by);
+CREATE INDEX IF NOT EXISTS sale_payments_cash_session_idx
+  ON public.sale_payments (business_id, created_by, created_at)
+  WHERE payment_method = 'Efectivo';
+CREATE INDEX IF NOT EXISTS purchase_payments_cash_session_idx
+  ON public.purchase_payments (business_id, created_by, created_at)
+  WHERE payment_method = 'Efectivo';
+CREATE INDEX IF NOT EXISTS expenses_cash_session_idx
+  ON public.expenses (business_id, created_by, created_at)
+  WHERE payment_method = 'Efectivo';
+
+-- Attribute each authenticated expense to the user who actually records it.
+-- The browser must not be able to spoof another user's cash drawer.
+ALTER TABLE public.expenses
+  ALTER COLUMN created_by SET DEFAULT auth.uid();
+
+CREATE OR REPLACE FUNCTION private.set_expense_created_by()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO ''
+AS $function$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF auth.uid() IS NOT NULL THEN
+      NEW.created_by := auth.uid();
+    END IF;
+    IF NEW.payment_method = 'Efectivo' AND NEW.created_by IS NOT NULL THEN
+      -- Use the same lock as payment inserts and cash-session closing.
+      -- This makes the open-session check atomic with respect to a concurrent close.
+      PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended(NEW.business_id::text || ':' || NEW.created_by::text, 0)
+      );
+      IF NOT EXISTS (
+        SELECT 1
+        FROM public.cash_register_sessions s
+        WHERE s.business_id = NEW.business_id
+          AND s.opened_by = NEW.created_by
+          AND s.status = 'open'
+      ) THEN
+        RAISE EXCEPTION 'Abre una caja antes de registrar un gasto en efectivo.'
+          USING ERRCODE = 'check_violation';
+      END IF;
+      NEW.created_at := pg_catalog.clock_timestamp();
+    END IF;
+  ELSE
+    NEW.created_by := OLD.created_by;
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+-- Serialize cash payment inserts against the matching user's drawer close.
+CREATE OR REPLACE FUNCTION private.lock_cash_register_payment()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor uuid;
+BEGIN
+  IF NEW.payment_method = 'Efectivo' AND NEW.business_id IS NOT NULL THEN
+    -- Bind identity before deriving the lock key; client-supplied created_by
+    -- must never choose another cashier's lock or drawer.
+    IF auth.uid() IS NOT NULL THEN
+      NEW.created_by := auth.uid();
+    END IF;
+    v_actor := coalesce(auth.uid(), NEW.created_by);
+    IF v_actor IS NULL THEN
+      RAISE EXCEPTION 'No se pudo identificar al responsable del movimiento en efectivo.'
+        USING ERRCODE = 'check_violation';
+    END IF;
+
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(NEW.business_id::text || ':' || v_actor::text, 0)
+    );
+
+    -- Recheck after acquiring the same lock used by close_cash_register_session.
+    -- A payment waiting behind a close must fail rather than land outside the session.
+    IF NOT EXISTS (
+      SELECT 1
+      FROM public.cash_register_sessions s
+      WHERE s.business_id = NEW.business_id
+        AND s.opened_by = v_actor
+        AND s.status = 'open'
+    ) THEN
+      RAISE EXCEPTION 'Abre una caja antes de registrar un pago en efectivo.'
+        USING ERRCODE = 'check_violation';
+    END IF;
+    -- now() is transaction-start time and may predate a lock wait.
+    NEW.created_at := pg_catalog.clock_timestamp();
+  END IF;
+  RETURN NEW;
+END;
+$function$;
+
+DROP TRIGGER IF EXISTS lock_cash_register_sale_payment ON public.sale_payments;
+CREATE TRIGGER lock_cash_register_sale_payment
+BEFORE INSERT ON public.sale_payments
+FOR EACH ROW EXECUTE FUNCTION private.lock_cash_register_payment();
+
+DROP TRIGGER IF EXISTS lock_cash_register_purchase_payment ON public.purchase_payments;
+CREATE TRIGGER lock_cash_register_purchase_payment
+BEFORE INSERT ON public.purchase_payments
+FOR EACH ROW EXECUTE FUNCTION private.lock_cash_register_payment();
+
+DROP TRIGGER IF EXISTS set_expense_created_by ON public.expenses;
+CREATE TRIGGER set_expense_created_by
+BEFORE INSERT OR UPDATE OF created_by ON public.expenses
+FOR EACH ROW EXECUTE FUNCTION private.set_expense_created_by();
+
+DROP POLICY IF EXISTS expenses_insert_by_permission ON public.expenses;
+-- The frontend sends bank_account_id (including NULL) with every expense.
+-- Grant only that column; the AFTER trigger validates business, active status,
+-- currency, opening date and manager rights before creating a bank movement.
+GRANT INSERT (bank_account_id) ON TABLE public.expenses TO authenticated;
+
+CREATE POLICY expenses_insert_by_permission
+ON public.expenses FOR INSERT TO authenticated
+WITH CHECK (
+  created_by = (select auth.uid())
+  AND private.can_access_business(business_id, 'expenses_manage')
+  AND (
+    bank_account_id IS NULL
+    OR (payment_method <> 'Efectivo' AND private.can_manage_members(business_id))
+  )
+);
+
+-- Keep the compatibility policies efficient until the post-deploy
+-- direct-write revocation removes them. Evaluate auth.uid() once per statement.
+DROP POLICY IF EXISTS cash_register_sessions_insert_by_permission ON public.cash_register_sessions;
+CREATE POLICY cash_register_sessions_insert_by_permission
+ON public.cash_register_sessions FOR INSERT TO authenticated
+WITH CHECK (
+  opened_by = (select auth.uid())
+  AND private.can_access_business(business_id, 'sales_manage')
+);
+
+DROP POLICY IF EXISTS cash_register_sessions_update_by_permission ON public.cash_register_sessions;
+CREATE POLICY cash_register_sessions_update_by_permission
+ON public.cash_register_sessions FOR UPDATE TO authenticated
+USING (
+  opened_by = (select auth.uid())
+  OR private.can_manage_members(business_id)
+)
+WITH CHECK (
+  opened_by = (select auth.uid())
+  OR private.can_manage_members(business_id)
+);
+
+-- Direct INSERT/UPDATE grants are revoked in a follow-up migration after the
+-- application has moved to these RPCs.
+
+CREATE OR REPLACE FUNCTION public.open_cash_register_session(
+  p_business_id uuid,
+  p_opening_cash_minor bigint DEFAULT 0
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_currency_code character(3);
+  v_opened_at timestamptz;
+  v_session public.cash_register_sessions%ROWTYPE;
+BEGIN
+  IF v_actor IS NULL THEN
+    RAISE EXCEPTION 'Debes iniciar sesión para abrir una caja.';
+  END IF;
+
+  IF p_opening_cash_minor IS NULL OR p_opening_cash_minor < 0 THEN
+    RAISE EXCEPTION 'El efectivo inicial no puede ser negativo.';
+  END IF;
+
+  IF NOT private.can_access_business(p_business_id, 'sales_manage') THEN
+    RAISE EXCEPTION 'No tienes permiso para abrir la caja de este negocio.';
+  END IF;
+
+  SELECT b.currency_code
+  INTO v_currency_code
+  FROM public.businesses b
+  WHERE b.id = p_business_id;
+
+  IF v_currency_code IS NULL THEN
+    RAISE EXCEPTION 'No encontramos el negocio seleccionado.';
+  END IF;
+
+  -- Serialize concurrent attempts by the same user and business.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(p_business_id::text || ':' || v_actor::text, 0)
+  );
+
+  v_opened_at := pg_catalog.clock_timestamp();
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.cash_register_sessions s
+    WHERE s.business_id = p_business_id
+      AND s.opened_by = v_actor
+      AND s.status = 'open'
+  ) THEN
+    RAISE EXCEPTION 'Ya tienes una caja abierta para este negocio.';
+  END IF;
+
+  INSERT INTO public.cash_register_sessions (
+    business_id,
+    opened_by,
+    currency_code,
+    opening_cash_minor,
+    status,
+    opened_at,
+    created_at,
+    updated_at
+  )
+  VALUES (
+    p_business_id,
+    v_actor,
+    v_currency_code,
+    p_opening_cash_minor,
+    'open',
+    v_opened_at,
+    v_opened_at,
+    v_opened_at
+  )
+  RETURNING * INTO v_session;
+
+  RETURN jsonb_build_object('session', to_jsonb(v_session));
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.close_cash_register_session(
+  p_business_id uuid,
+  p_session_id uuid,
+  p_closing_cash_minor bigint,
+  p_close_notes text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_actor uuid := auth.uid();
+  v_session_owner uuid;
+  v_close_at timestamptz;
+  v_session public.cash_register_sessions%ROWTYPE;
+  v_received bigint := 0;
+  v_purchases bigint := 0;
+  v_expenses bigint := 0;
+  v_expected bigint := 0;
+  v_sale_count bigint := 0;
+  v_purchase_count bigint := 0;
+  v_expense_count bigint := 0;
+BEGIN
+  IF v_actor IS NULL THEN
+    RAISE EXCEPTION 'Debes iniciar sesión para cerrar una caja.';
+  END IF;
+
+  IF p_closing_cash_minor IS NULL OR p_closing_cash_minor < 0 THEN
+    RAISE EXCEPTION 'El efectivo contado no puede ser negativo.';
+  END IF;
+
+  IF length(coalesce(p_close_notes, '')) > 1000 THEN
+    RAISE EXCEPTION 'Las notas de cierre no pueden superar 1.000 caracteres.';
+  END IF;
+
+  IF NOT private.can_access_business(p_business_id, 'sales_manage') THEN
+    RAISE EXCEPTION 'No tienes permiso para cerrar cajas de este negocio.';
+  END IF;
+
+  -- Coordinate cash writes and close using the same per-user/business lock.
+  SELECT s.opened_by
+  INTO v_session_owner
+  FROM public.cash_register_sessions s
+  WHERE s.id = p_session_id
+    AND s.business_id = p_business_id
+    AND s.status = 'open';
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'La caja ya está cerrada o no pertenece a este negocio.';
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(p_business_id::text || ':' || v_session_owner::text, 0)
+  );
+  v_close_at := pg_catalog.clock_timestamp();
+
+  SELECT s.*
+  INTO v_session
+  FROM public.cash_register_sessions s
+  WHERE s.id = p_session_id
+    AND s.business_id = p_business_id
+    AND s.status = 'open'
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'La caja ya está cerrada o no pertenece a este negocio.';
+  END IF;
+
+  IF v_session.opened_by IS DISTINCT FROM v_actor
+     AND NOT private.can_manage_members(p_business_id) THEN
+    RAISE EXCEPTION 'Solo quien abrió la caja o un administrador puede cerrarla.';
+  END IF;
+
+  SELECT coalesce(sum(sp.amount_minor), 0), count(*)
+  INTO v_received, v_sale_count
+  FROM public.sale_payments sp
+  WHERE sp.business_id = p_business_id
+    AND sp.created_by = v_session.opened_by
+    AND sp.payment_method = 'Efectivo'
+    -- Attribute cash to the drawer when it is recorded, not by the editable
+    -- accounting date (paid_at is date-only in the UI and may be backdated).
+    AND sp.created_at >= v_session.opened_at
+    AND sp.created_at <= v_close_at;
+
+  SELECT coalesce(sum(pp.amount_minor), 0), count(*)
+  INTO v_purchases, v_purchase_count
+  FROM public.purchase_payments pp
+  WHERE pp.business_id = p_business_id
+    AND pp.created_by = v_session.opened_by
+    AND pp.payment_method = 'Efectivo'
+    -- Keep the financial paid_at date for reports, but use creation time for
+    -- the physical cash drawer session.
+    AND pp.created_at >= v_session.opened_at
+    AND pp.created_at <= v_close_at;
+
+  SELECT coalesce(sum(e.amount_minor), 0), count(*)
+  INTO v_expenses, v_expense_count
+  FROM public.expenses e
+  WHERE e.business_id = p_business_id
+    AND e.created_by = v_session.opened_by
+    AND e.payment_method = 'Efectivo'
+    AND e.created_at >= v_session.opened_at
+    AND e.created_at <= v_close_at;
+
+  v_expected := v_session.opening_cash_minor + v_received - v_purchases - v_expenses;
+
+  UPDATE public.cash_register_sessions
+  SET
+    closed_by = v_actor,
+    closed_at = v_close_at,
+    status = 'closed',
+    closing_cash_minor = p_closing_cash_minor,
+    expected_cash_minor = v_expected,
+    difference_minor = p_closing_cash_minor - v_expected,
+    close_notes = nullif(btrim(coalesce(p_close_notes, '')), ''),
+    updated_at = v_close_at
+  WHERE id = v_session.id
+    AND business_id = p_business_id
+    AND status = 'open'
+  RETURNING * INTO v_session;
+
+  RETURN jsonb_build_object(
+    'session', to_jsonb(v_session),
+    'cash_received_minor', v_received,
+    'cash_paid_purchases_minor', v_purchases,
+    'cash_paid_expenses_minor', v_expenses,
+    'expected_cash_minor', v_expected,
+    'difference_minor', p_closing_cash_minor - v_expected,
+    'cash_received_count', v_sale_count,
+    'cash_purchase_count', v_purchase_count,
+    'cash_expense_count', v_expense_count
+  );
+END;
+$function$;
+
+REVOKE ALL ON FUNCTION public.open_cash_register_session(uuid, bigint) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.close_cash_register_session(uuid, uuid, bigint, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.open_cash_register_session(uuid, bigint) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.close_cash_register_session(uuid, uuid, bigint, text) TO authenticated;
+
+DROP TRIGGER IF EXISTS audit_business_changes ON public.cash_register_sessions;
+CREATE TRIGGER audit_business_changes
+AFTER INSERT OR UPDATE OR DELETE ON public.cash_register_sessions
+FOR EACH ROW EXECUTE FUNCTION private.log_business_audit_event();
