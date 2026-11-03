@@ -4020,7 +4020,7 @@ function AuthenticatedApp() {
       const tableNames=[
         "product_categories","products","product_images","product_variants","customers","suppliers",
         "sales","sale_items","sale_payments","purchases","purchase_items","purchase_payments",
-        "expenses","bank_accounts","bank_movements","stock_movements","audit_logs","quotes","quote_items","business_coupons"
+        "expenses","bank_accounts","bank_movements","stock_movements","cash_register_sessions","audit_logs","quotes","quote_items","business_coupons"
       ];
       const backup={format:"treseiscinco-business-backup-v1",generated_at:new Date().toISOString(),
         business:{id:activeBusiness.id,name:activeBusiness.name,currency_code:activeBusiness.currency_code,
@@ -7347,7 +7347,7 @@ function AuthenticatedApp() {
       ["Ingresos", statsCollected / unit],
       ["Gastos", statsExpensesTotal / unit],
       ["Compras pagadas", statsPaidPurchases / unit],
-      ["Balance", statsCashBalance / unit],
+      ["Flujo neto del periodo", statsCashBalance / unit],
       ["Ventas registradas", statsSalesTotal / unit],
       ["Pendiente por cobrar", statsOutstanding / unit],
       [],
@@ -8374,7 +8374,7 @@ function AuthenticatedApp() {
                 <article className="stats-metric panel stats-income"><span>Ingresos</span><strong>{money(statsCollected, currencyCode)}</strong><small>Pagos recibidos en el periodo</small></article>
                 <article className="stats-metric panel"><span>Gastos</span><strong>{money(statsExpensesTotal, currencyCode)}</strong><small>{statsPeriodExpenses.length} {statsPeriodExpenses.length === 1 ? "gasto registrado" : "gastos registrados"}</small></article>
                 <article className="stats-metric panel"><span>Compras pagadas</span><strong>{money(statsPaidPurchases, currencyCode)}</strong><small>Pagos de compras del periodo</small></article>
-                <article className={"stats-metric panel stats-balance" + (statsCashBalance < 0 ? " profit-negative" : " profit-positive")}><span>Balance</span><strong>{money(statsCashBalance, currencyCode)}</strong><small>Ingresos − gastos − compras pagadas</small></article>
+                <article className={"stats-metric panel stats-balance" + (statsCashBalance < 0 ? " profit-negative" : " profit-positive")}><span>Flujo neto del periodo</span><strong>{money(statsCashBalance, currencyCode)}</strong><small>Entradas cobradas − gastos − pagos de compras. No representa el saldo bancario actual.</small></article>
               </div>
               <div className="chart-type-picker" role="group" aria-label="Tipo de gráfico"><button type="button" className={statsChartType === "bars" ? "active" : ""} aria-pressed={statsChartType === "bars"} onClick={() => setStatsChartType("bars")}>Barras</button><button type="button" className={statsChartType === "pie" ? "active" : ""} aria-pressed={statsChartType === "pie"} onClick={() => setStatsChartType("pie")}>Pastel</button><button type="button" className={statsChartType === "area" ? "active" : ""} aria-pressed={statsChartType === "area"} onClick={() => setStatsChartType("area")}>Área</button></div>{statsChartType === "bars" ? <SimpleBars title="Balance diario" description="Diferencia entre pagos recibidos y salidas registradas durante los últimos siete días." data={balanceChartData.map((item)=>({key:item.key,label:item.label,value:item.value}))} formatValue={(value)=>money(value,currencyCode)} /> : statsChartType === "pie" ? <SimplePie title="Distribución del balance" description="Comparación de ingresos y salidas en el periodo seleccionado." data={[{label:"Ingresos",value:statsCollected},{label:"Gastos",value:statsExpensesTotal},{label:"Compras pagadas",value:statsPaidPurchases}]} formatValue={(value)=>money(value,currencyCode)} /> : <SimpleArea title="Evolución del balance" description="Pagos recibidos y salidas por día de los últimos siete días." badge="7 días" data={balanceChartData.map((item)=>({key:item.key,label:item.label,value:item.value}))} series={[{key:"value",label:"Balance",color:"#2563EB"}]} formatValue={(value)=>money(value,currencyCode)} />}
               <section className="stats-insight-section">
@@ -9124,7 +9124,7 @@ function AuthenticatedApp() {
                 <div className="settings-icon"><AppIcon name="settings" size={23}/></div>
                 <h3>Copias de seguridad</h3>
                 <p>Descarga una copia de los registros accesibles de este negocio. El archivo incluye las filas que tus permisos permiten consultar y señala cualquier tabla que no se haya podido exportar.</p>
-                <div className="settings-data-card"><div><strong>Copia de seguridad del negocio</strong><p>Productos, categorías, clientes, proveedores, ventas, pagos, compras, gastos, movimientos, cotizaciones, cupones y auditoría cuando los permisos lo permitan.</p></div><button type="button" className="primary-button" onClick={downloadBusinessBackup} disabled={backupBusy||!activeBusiness?.id||activeBusiness?.role!=="owner"}>{backupBusy?"Preparando copia…":"Descargar copia"}</button></div>
+                <div className="settings-data-card"><div><strong>Copia de seguridad del negocio</strong><p>Productos, categorías, clientes, proveedores, ventas, pagos, compras, gastos, cajas, movimientos, cotizaciones, cupones y auditoría cuando los permisos lo permitan.</p></div><button type="button" className="primary-button" onClick={downloadBusinessBackup} disabled={backupBusy||!activeBusiness?.id||activeBusiness?.role!=="owner"}>{backupBusy?"Preparando copia…":"Descargar copia"}</button></div>
                 {activeBusiness?.role!=="owner"&&<p className="helper-text">Solo el propietario puede descargar una copia completa del negocio.</p>}
                 <div className="tax-guidance-note"><strong>Importante</strong><p>La descarga no incluye contraseñas, credenciales privadas de pasarelas ni cuentas de acceso. Guarda el archivo en un lugar seguro; contiene información comercial y datos de clientes.</p></div>
               </div>
