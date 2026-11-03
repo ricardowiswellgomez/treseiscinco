@@ -100,6 +100,28 @@ WITH CHECK (
   )
 );
 
+-- Keep the compatibility policies efficient until the post-deploy
+-- direct-write revocation removes them. Evaluate auth.uid() once per statement.
+DROP POLICY IF EXISTS cash_register_sessions_insert_by_permission ON public.cash_register_sessions;
+CREATE POLICY cash_register_sessions_insert_by_permission
+ON public.cash_register_sessions FOR INSERT TO authenticated
+WITH CHECK (
+  opened_by = (select auth.uid())
+  AND private.can_access_business(business_id, 'sales_manage')
+);
+
+DROP POLICY IF EXISTS cash_register_sessions_update_by_permission ON public.cash_register_sessions;
+CREATE POLICY cash_register_sessions_update_by_permission
+ON public.cash_register_sessions FOR UPDATE TO authenticated
+USING (
+  opened_by = (select auth.uid())
+  OR private.can_manage_members(business_id)
+)
+WITH CHECK (
+  opened_by = (select auth.uid())
+  OR private.can_manage_members(business_id)
+);
+
 -- Direct INSERT/UPDATE grants are revoked in a follow-up migration after the
 -- application has moved to these RPCs.
 
