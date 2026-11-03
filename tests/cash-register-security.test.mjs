@@ -66,6 +66,7 @@ test("cash payments and expenses require the actor's open session under the same
   assert.ok(paymentStart >= 0 && paymentEnd > paymentStart);
   assert.match(paymentGuard, /pg_advisory_xact_lock/);
   assert.match(paymentGuard, /NEW\.created_by := auth\.uid\(\)/);
+  assert.ok(paymentGuard.indexOf("NEW.created_by := auth.uid()") < paymentGuard.indexOf("pg_advisory_xact_lock"), "the authenticated actor must be fixed before deriving the lock key");
   assert.match(paymentGuard, /FROM public\.cash_register_sessions/);
   assert.match(paymentGuard, /s\.opened_by = v_actor/);
   assert.match(paymentGuard, /s\.status = 'open'/);
