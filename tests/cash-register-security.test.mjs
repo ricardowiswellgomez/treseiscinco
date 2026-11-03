@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
 const serverMigration = await readFile(new URL("../supabase/migrations/20261103173636_add_server_cash_register_rpcs.sql", import.meta.url), "utf8");
 const lockdownMigration = await readFile(new URL("../supabase/post-deploy/20261102000400_restrict_cash_register_direct_writes.sql", import.meta.url), "utf8");
+const dedupeMigration = await readFile(new URL("../supabase/migrations/20261103173747_deduplicate_cash_register_open_index.sql", import.meta.url), "utf8");
 
 test("cash opening and closing use server-side RPCs, not direct table writes", () => {
   const start = app.indexOf("async function openCashRegister(event)");
@@ -81,6 +82,12 @@ test("cash payments and expenses require the actor's open session under the same
   assert.match(expenseGuard, /s\.opened_by = NEW\.created_by/);
   assert.match(expenseGuard, /s\.status = 'open'/);
   assert.match(expenseGuard, /Abre una caja antes de registrar un gasto en efectivo/);
+});
+
+test("only one equivalent unique open-session index remains", () => {
+  assert.match(serverMigration, /CREATE UNIQUE INDEX IF NOT EXISTS cash_register_sessions_one_open_per_user_idx/);
+  assert.match(dedupeMigration, /DROP INDEX IF EXISTS public\.cash_register_sessions_one_open_per_user_idx/);
+  assert.match(dedupeMigration, /Keep the original unique open-session index/);
 });
 
 test("cash sessions are audited and direct API writes are removed after rollout", () => {
