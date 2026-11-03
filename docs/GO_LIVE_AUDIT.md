@@ -17,7 +17,8 @@ No se aplicaron las migraciones del PR a producción ni se revocaron escrituras 
 - PR #80 permanece abierto y en borrador.
 - GitHub Actions, ejecución **#506**, terminó en `success` sobre el HEAD previo: pasó instalación limpia, auditoría de dependencias de alta severidad, sintaxis del Worker, pruebas, build web, verificación de la ruta APK, APK instalable, icono de marca y validación de activos estáticos.
 - En #506, el job `build` terminó en `success` y el job `Deploy production Worker` quedó `skipped`, como corresponde a un evento de pull request. No se publicó el Worker.
-- Después de #506 se añadieron controles de sesión obligatoria para movimientos en efectivo y pruebas de regresión; **el HEAD actual debe pasar una nueva ejecución completa de CI**. No declarar esas últimas modificaciones aprobadas hasta que termine.
+- Después de #506 se añadieron controles de sesión obligatoria para movimientos en efectivo, una corrección de identidad antes del bloqueo de concurrencia y pruebas de regresión.
+- GitHub Actions **#512** está asociado al HEAD actual (`e9ebe4e72012970930ea5deefcbb558c367c31fd`) y se encontraba `in_progress` durante esta actualización. No declarar aprobadas las últimas modificaciones hasta que concluya: [ejecución #512](https://github.com/ricardowiswellgomez/treseiscinco/actions/runs/41681382217).
 - El artefacto Android de #494 es histórico y de prueba; no se publicó como APK de producción.
 - El artefacto `treseiscinco-apk` se generó correctamente (4.281.532 bytes; SHA-256 `489fd6566d39b7e997943c1ef7c2e74150dfe80e2df88b1c9766abdd2048898d`). Es un artefacto de prueba; no se publicó como APK de producción.
 - El despliegue del Worker se omitió correctamente porque el evento fue un pull request. El APK se incorpora al directorio `dist` del mismo build para publicarlo como activo estático.
