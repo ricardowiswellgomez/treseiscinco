@@ -6924,11 +6924,12 @@ body { background: #F5F7FC; color: #19243A; }
 }
 
 
-/* Direct Android package download; retain browser installation for iOS and desktop. */
-.landing-install-actions{display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:175px}
-.landing-install-actions .landing-install-button{width:100%;text-align:center}
-.landing-install-secondary,.auth-install-secondary{display:inline-flex;align-items:center;justify-content:center;min-height:36px;padding:8px 10px;border:1px solid #D1E2E2;border-radius:10px;background:#FFFFFF;color:#26636A;font-size:11.5px;font-weight:750;cursor:pointer}
+/* Separate Android APK and iPhone web-app installation options. */
+.landing-install-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:8px;min-width:340px}
+.landing-install-actions .landing-install-button{width:100%;min-height:48px;text-align:center}
+.landing-install-secondary,.auth-install-secondary{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:8px 10px;border:1px solid #D1E2E2;border-radius:10px;background:#FFFFFF;color:#26636A;font-size:11.5px;font-weight:750;cursor:pointer}
 .landing-install-secondary:hover,.auth-install-secondary:hover{background:#F1F8F7;border-color:#9ECAC7}
+.landing-install-actions .landing-install-secondary{width:100%;min-height:48px;padding:8px 10px;text-align:center}
 .auth-install-actions{display:flex;flex-direction:column;gap:6px;min-width:130px}
 .auth-install-actions .auth-install-button{width:100%;text-decoration:none}
 .auth-apk-download{display:flex}
@@ -6938,6 +6939,7 @@ body { background: #F5F7FC; color: #19243A; }
 @media(max-width:700px){
  .landing-install-actions{grid-column:1/-1;width:100%;min-width:0}
  .landing-install-actions .landing-install-button{width:100%}
+ .landing-install-actions .landing-install-secondary{width:100%;font-size:11px;padding:8px 6px}
  .auth-install-actions{grid-column:1/-1;width:100%;min-width:0}
 }
 
