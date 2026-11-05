@@ -1693,21 +1693,21 @@ function PublicLanding({ onLogin, onSignup, onInstall, installPromptAvailable, a
       <span className="landing-install-icon"><AppIcon name="smartphone" size={25}/></span>
       <div className="landing-install-copy">
         <span className="landing-kicker">TAMBIÉN EN TU CELULAR</span>
-        <h2>Descarga la app y maneja tu negocio con claridad.</h2>
-        <p>Instala treseiscinco en la pantalla de inicio y ten tus herramientas a mano, sin buscar la página cada vez.</p>
+        <h2>Elige cómo instalar treseiscinco.</h2>
+        <p>Android: descarga el APK. iPhone: instala la versión web desde Safari, sin App Store ni archivos adicionales.</p>
       </div>
       <div className="landing-install-actions">
-        <a className="landing-install-button landing-apk-download" href="/download/apk"><AppIcon name="download" size={18}/> Descargar APK <span aria-hidden="true">↓</span></a>
-        <button type="button" className="landing-install-secondary" onClick={onInstall}>{installPromptAvailable ? "Instalar en el navegador" : "Opciones para iPhone / PC"}</button>
+        <a className="landing-install-button landing-apk-download" href="/download/apk"><AppIcon name="download" size={18}/> Descargar Android <span aria-hidden="true">↓</span></a>
+        <button type="button" className="landing-install-secondary landing-ios-install" onClick={onInstall}><AppIcon name="smartphone" size={17}/> Instalar en iPhone <span aria-hidden="true">↗</span></button>
       </div>
     </section>}
 
     {showInstallGuide && !appInstalled && <section className="install-guide-panel landing-install-guide" aria-label="Instrucciones para instalar treseiscinco">
-      <div className="install-guide-heading"><div><span className="eyebrow">TRESEISCINCO · APP INSTALABLE</span><h3>Instálala en tu pantalla de inicio</h3><p>No necesitas buscar ni bajar un archivo externo: tu navegador instala la versión web como una aplicación.</p></div><button type="button" className="icon-action-button" aria-label="Cerrar instrucciones" onClick={onCloseInstallGuide}>×</button></div>
+      <div className="install-guide-heading"><div><span className="eyebrow">TRESEISCINCO · INSTALACIÓN PARA IPHONE</span><h3>Instala treseiscinco en tu iPhone</h3><p>En iOS funciona como una app web: no hay que descargar un APK, un archivo IPA ni buscarla en App Store.</p></div><button type="button" className="icon-action-button" aria-label="Cerrar instrucciones" onClick={onCloseInstallGuide}>×</button></div>
       <div className="install-guide-steps">
-        <div><strong>Android · Chrome</strong><p>Pulsa «Instalar app» si aparece el aviso. Si no, abre el menú ⋮ y elige «Instalar aplicación» o «Agregar a pantalla principal».</p></div>
-        <div><strong>iPhone · Safari</strong><p>Toca Compartir y selecciona «Agregar a pantalla de inicio»; después confirma «Agregar».</p></div>
-        <div><strong>Computador · Chrome o Edge</strong><p>Usa el icono de instalar en la barra de direcciones o abre el menú y selecciona «Instalar treseiscinco».</p></div>
+        <div><strong>iPhone · Safari</strong><p>Abre treseiscinco.com en Safari, toca Compartir, elige «Agregar a pantalla de inicio» y pulsa «Agregar». Si aparece «Abrir como app web», déjalo activado.</p></div>
+        <div><strong>Android · APK</strong><p>Pulsa «Descargar Android». Cuando termine, abre el archivo treseiscinco.apk y sigue la confirmación de instalación de Android.</p></div>
+        <div><strong>Computador</strong><p>En Chrome o Edge, usa el icono Instalar de la barra de direcciones o la opción «Instalar treseiscinco» del menú.</p></div>
       </div>
     </section>}
 
@@ -7804,7 +7804,7 @@ function AuthenticatedApp() {
         {!appInstalled && mode !== "update-password" && <div className="auth-mobile-install">
           <span className="auth-install-icon"><AppIcon name="smartphone" size={24}/></span>
           <div className="auth-install-copy"><strong>Tu negocio, también en tu celular</strong><p>Instala treseiscinco y maneja con claridad desde la pantalla de inicio.</p></div>
-          <div className="auth-install-actions"><a className="auth-install-button auth-apk-download" href="/download/apk"><AppIcon name="download" size={15}/> Descargar APK</a><button type="button" className="auth-install-secondary" onClick={requestPwaInstall}>{installPrompt ? "Instalar en navegador" : "Otras opciones"}</button></div>
+          <div className="auth-install-actions"><a className="auth-install-button auth-apk-download" href="/download/apk"><AppIcon name="download" size={15}/> Descargar Android</a><button type="button" className="auth-install-secondary" onClick={requestPwaInstall}><AppIcon name="smartphone" size={15}/> Instalar en iPhone</button></div>
         </div>}
         {showInstallGuide && !appInstalled && mode !== "update-password" && <section className="install-guide-panel auth-install-guide">
           <div className="install-guide-heading"><div><span className="eyebrow">TRESEISCINCO · APP INSTALABLE</span><h3>Instálala en tu celular</h3><p>No necesitas bajar un archivo externo; se instala desde tu navegador.</p></div><button type="button" className="icon-action-button" aria-label="Cerrar instrucciones" onClick={() => setShowInstallGuide(false)}>×</button></div>
